@@ -41,7 +41,8 @@ const SEEDS = [
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
-const BATCH = Number((args[args.indexOf('--batch') + 1]) || 100);
+const _bi = args.indexOf('--batch');
+const BATCH = _bi >= 0 ? Number(args[_bi + 1]) : 100;
 
 const jget = async (url) => {
   const r = await fetch(url, { headers: { Accept: 'application/json' } });

@@ -19,8 +19,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
 const CORPUS_DIR = join(__dirname, 'corpus');
-const CACHE_PATH = join(__dirname, 'data', 'embeddings.json');
-const EMBED_BATCH = Number(process.env.EMBED_BATCH || 64);
+const BIN_PATH = join(__dirname, 'data', 'embeddings.bin');
+const IDS_PATH = join(__dirname, 'data', 'embeddings.ids.txt');
+const META_PATH = join(__dirname, 'data', 'embeddings.meta.json');
 
 const PORT = process.env.PORT || 5174;
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
@@ -50,18 +51,6 @@ async function embed(texts) {
   return json.data.map((d) => d.embedding);
 }
 
-// Embebe en lotes (para corpus grandes sin saturar al servidor de embeddings)
-async function embedBatched(texts) {
-  const out = [];
-  for (let i = 0; i < texts.length; i += EMBED_BATCH) {
-    const batch = texts.slice(i, i + EMBED_BATCH);
-    out.push(...(await embed(batch)));
-    process.stdout.write(`\r  embeddings ${Math.min(i + EMBED_BATCH, texts.length)}/${texts.length}`);
-  }
-  process.stdout.write('\n');
-  return out;
-}
-
 async function chat(messages, { temperature = 0.1 } = {}) {
   const res = await fetch(`${LM_BASE}/chat/completions`, {
     method: 'POST',
@@ -73,112 +62,126 @@ async function chat(messages, { temperature = 0.1 } = {}) {
   return json.choices[0].message.content;
 }
 
-function cosine(a, b) {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-9);
-}
-
 // ---------------------------------------------------------------------------
-// Índice: embebe el corpus una vez y lo cachea
+// Índice: corpus en memoria + embeddings en store BINARIO (data/embeddings.bin)
+// El embedding lo produce `node embed.mjs` (offline, resumible). El servidor
+// solo CARGA. Escala a cientos de miles de artículos (el JSON no escalaba).
 // ---------------------------------------------------------------------------
-let INDEX = []; // [{ ...doc, embedding }]
+let INDEX = [];      // [{ ...doc, row }]  fila en VEC
+let VEC = null;      // Float32Array con todos los vectores contiguos
+let DIM = 0;
 
 async function loadCorpus() {
   // Ficheros con prefijo "_" son de trabajo del ingestor (índice, manifiesto), no corpus.
   const files = (await readdir(CORPUS_DIR)).filter((f) => f.endsWith('.json') && !f.startsWith('_')).sort();
   const docs = [];
-  for (const f of files) {
-    const arr = JSON.parse(await readFile(join(CORPUS_DIR, f), 'utf-8'));
-    docs.push(...arr);
-  }
+  for (const f of files) { for (const d of JSON.parse(await readFile(join(CORPUS_DIR, f), 'utf-8'))) docs.push(d); }
   return docs;
 }
 
 async function buildIndex() {
   const corpus = await loadCorpus();
-
-  // Caché incremental por id: reutiliza embeddings ya calculados y solo embebe
-  // los fragmentos nuevos. Permite hacer crecer el corpus por lotes sin recalcular.
-  const prev = new Map();
-  if (existsSync(CACHE_PATH)) {
-    const cache = JSON.parse(await readFile(CACHE_PATH, 'utf-8'));
-    if (cache.model === EMBED_MODEL) for (const d of cache.docs) prev.set(d.id, d.embedding);
+  if (!existsSync(META_PATH) || !existsSync(BIN_PATH) || !existsSync(IDS_PATH)) {
+    console.warn('⚠ Sin store de embeddings (data/embeddings.bin). Ejecuta: node embed.mjs');
+    INDEX = []; return;
   }
-
-  const missing = corpus.filter((d) => !prev.has(d.id));
-  if (missing.length) {
-    console.log(`Embebiendo ${missing.length} fragmentos nuevos (de ${corpus.length}) con ${EMBED_MODEL}…`);
-    const vectors = await embedBatched(missing.map((d) => `${d.cita} — ${d.materia}\n${d.texto}`));
-    missing.forEach((d, i) => prev.set(d.id, vectors[i]));
-  } else {
-    console.log(`✓ Sin fragmentos nuevos que embeber (${corpus.length})`);
+  const meta = JSON.parse(await readFile(META_PATH, 'utf-8'));
+  DIM = meta.dim;
+  const buf = await readFile(BIN_PATH);
+  // Copia alineada a 4 bytes para la vista Float32
+  const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  VEC = new Float32Array(ab);
+  const ids = (await readFile(IDS_PATH, 'utf-8')).split('\n').filter(Boolean);
+  const binRows = Math.floor(VEC.length / DIM);
+  const usable = Math.min(ids.length, binRows); // por si se lee a media escritura
+  const rowOf = new Map();
+  for (let i = 0; i < usable; i++) rowOf.set(ids[i], i);
+  INDEX = [];
+  for (const d of corpus) {
+    const r = rowOf.get(d.id);
+    if (r !== undefined && (r + 1) * DIM <= VEC.length) INDEX.push({ ...d, row: r });
   }
+  console.log(`✓ Índice: ${INDEX.length}/${corpus.length} fragmentos con embedding (dim ${DIM})`);
+}
 
-  INDEX = corpus.map((d) => ({ ...d, embedding: prev.get(d.id) }));
-  await writeFile(CACHE_PATH, JSON.stringify({ model: EMBED_MODEL, docs: INDEX }));
-  console.log(`✓ Índice listo (${INDEX.length} fragmentos)`);
+function cosineRow(q, row) {
+  const base = row * DIM;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < DIM; i++) { const a = q[i], b = VEC[base + i]; dot += a * b; na += a * a; nb += b * b; }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-9);
 }
 
 // ---------------------------------------------------------------------------
-// Recuperación HÍBRIDA: léxica (BM25) + semántica (vectorial)
-// En derecho los términos exactos importan tanto como el significado, así que
-// combinamos ambas señales. Mejora drásticamente el recall en corpus grandes.
+// Recuperación HÍBRIDA: BM25 (índice invertido) + semántica (vectorial).
+// En derecho los términos exactos importan tanto como el significado.
 // ---------------------------------------------------------------------------
 const STOP = new Set(('de la el en y a los las del que se un una por con no para es su al lo como mas o pero sus le ya este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante todos uno les ni contra otros ese eso ante ellos e esto entonces entre cual sea cualquier').split(' '));
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokenize = (s) => norm(s).match(/[a-z0-9ñ]{3,}/g)?.filter((t) => !STOP.has(t)) || [];
 
-let LEX = null; // { df, idf, avgdl, docs: [{tf, len}] }
+let LEX = null; // { inv: Map(term -> [docIdx, tf, ...]), idf, len: Float64Array, avgdl }
 function buildLexical() {
+  const N = INDEX.length;
+  if (!N) { LEX = null; return; }
+  const inv = new Map();
   const df = new Map();
-  const docs = INDEX.map((d) => {
-    const toks = tokenize(`${d.cita} ${d.texto}`);
+  const len = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const toks = tokenize(`${INDEX[i].cita} ${INDEX[i].texto}`);
+    len[i] = toks.length;
     const tf = new Map();
     for (const t of toks) tf.set(t, (tf.get(t) || 0) + 1);
-    for (const t of tf.keys()) df.set(t, (df.get(t) || 0) + 1);
-    return { tf, len: toks.length };
-  });
-  const N = docs.length;
+    for (const [t, f] of tf) {
+      let a = inv.get(t); if (!a) { a = []; inv.set(t, a); }
+      a.push(i, f);
+      df.set(t, (df.get(t) || 0) + 1);
+    }
+  }
   const idf = new Map();
   for (const [t, n] of df) idf.set(t, Math.log(1 + (N - n + 0.5) / (n + 0.5)));
-  const avgdl = docs.reduce((s, d) => s + d.len, 0) / N;
-  LEX = { idf, avgdl, docs };
-  console.log(`✓ Índice léxico (BM25) construido (${idf.size} términos)`);
+  let tot = 0; for (let i = 0; i < N; i++) tot += len[i];
+  LEX = { inv, idf, len, avgdl: tot / N || 1 };
+  console.log(`✓ BM25 (índice invertido): ${idf.size} términos`);
 }
 
-function bm25Scores(query) {
-  const { idf, avgdl, docs } = LEX;
-  const qt = [...new Set(tokenize(query))];
+function bm25Map(query) {
+  const sc = new Map();
+  if (!LEX) return sc;
+  const { inv, idf, len, avgdl } = LEX;
   const k1 = 1.5, b = 0.75;
-  return docs.map((d) => {
-    let s = 0;
-    for (const t of qt) {
-      const f = d.tf.get(t); if (!f) continue;
-      const w = idf.get(t) || 0;
-      s += w * (f * (k1 + 1)) / (f + k1 * (1 - b + b * d.len / avgdl));
+  for (const t of new Set(tokenize(query))) {
+    const a = inv.get(t); if (!a) continue;
+    const w = idf.get(t) || 0;
+    for (let j = 0; j < a.length; j += 2) {
+      const di = a[j], f = a[j + 1];
+      const s = w * (f * (k1 + 1)) / (f + k1 * (1 - b + b * len[di] / avgdl));
+      sc.set(di, (sc.get(di) || 0) + s);
     }
-    return s;
-  });
+  }
+  return sc;
 }
-
-const minmax = (arr) => {
-  const mn = Math.min(...arr), mx = Math.max(...arr), r = mx - mn || 1;
-  return arr.map((x) => (x - mn) / r);
-};
 
 async function retrieve(query, k = TOP_K) {
+  if (!INDEX.length) return [];
   const [qv] = await embed([query]);
-  const vec = minmax(INDEX.map((d) => cosine(qv, d.embedding)));
-  const lex = minmax(bm25Scores(query));
-  return INDEX
-    .map((d, i) => ({ doc: d, score: 0.5 * lex[i] + 0.5 * vec[i], _lex: lex[i], _vec: vec[i] }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, k);
+  const n = INDEX.length;
+  // Vectorial: coseno sobre todo el índice
+  const vraw = new Float64Array(n);
+  let vmn = Infinity, vmx = -Infinity;
+  for (let i = 0; i < n; i++) { const v = cosineRow(qv, INDEX[i].row); vraw[i] = v; if (v < vmn) vmn = v; if (v > vmx) vmx = v; }
+  const vr = (vmx - vmn) || 1;
+  // Léxico: BM25 disperso
+  const bm = bm25Map(query);
+  let bmx = 0; for (const v of bm.values()) if (v > bmx) bmx = v; bmx = bmx || 1;
+  // Combinación 50/50 normalizada
+  const scored = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const vN = (vraw[i] - vmn) / vr;
+    const lN = (bm.get(i) || 0) / bmx;
+    scored[i] = { doc: INDEX[i], score: 0.5 * lN + 0.5 * vN };
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, k);
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +303,7 @@ function handleFuentes(req, res) {
   let docs = INDEX;
   if (q) docs = docs.filter((d) => (d.cita + d.fuente + d.materia + d.texto).toLowerCase().includes(q));
   const total = docs.length;
-  const fuentes = docs.slice(0, limit).map(({ embedding, ...meta }) => meta);
+  const fuentes = docs.slice(0, limit).map(({ row, ...meta }) => meta);
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ fuentes, total, mostrados: fuentes.length }));
 }
