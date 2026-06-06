@@ -1,0 +1,33 @@
+# Dependencias
+node_modules/
+
+# Secretos y entorno
+.env
+.env.*
+*.pem
+*.key
+
+# Datos sensibles / privados (NO subir)
+# - leads de despachos
+data/waitlist.json
+# - caché de embeddings (65 MB, regenerable)
+data/embeddings.json
+
+# Corpus jurídico masivo (regenerable con `node ingest.mjs`)
+# Se excluye hasta revisar licencia/tamaño para versionarlo.
+corpus/boe.json
+
+# Modelos / artefactos pesados
+*.gguf
+*.bin
+*.safetensors
+
+# Logs y temporales
+*.log
+logs/
+*.tmp
+tmp/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db

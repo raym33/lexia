@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lexia ⚖️ — App</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="app">
+  <div class="side">
+    <div class="logo brand">Lexia <span class="accent">⚖</span></div>
+    <nav>
+      <a href="#consulta" data-view="consulta" class="active">🔎 <span>Consulta</span></a>
+      <a href="#redaccion" data-view="redaccion">✍️ <span>Redacción</span></a>
+      <a href="#biblioteca" data-view="biblioteca">📚 <span>Biblioteca</span></a>
+      <a href="#historial" data-view="historial">🕘 <span>Historial</span></a>
+    </nav>
+    <div class="foot">
+      <span class="badge">● local</span><br><br>
+      Sin datos a terceros.<br><a href="/">← Volver a la web</a>
+    </div>
+  </div>
+
+  <!-- CONSULTA -->
+  <section class="view active" id="view-consulta">
+    <div class="view-head"><h2>🔎 Consulta jurídica</h2><p>Pregunta sobre legislación y jurisprudencia. Respuesta citada y verificable.</p></div>
+    <div class="view-body">
+      <div class="col-main">
+        <div id="chat">
+          <div class="empty" id="chat-empty">
+            <h3>Consulta en lenguaje natural</h3>
+            <p>Lexia recupera las normas relevantes y responde citando cada fuente, sin inventar.</p>
+            <div class="chips" id="ex-chips">
+              <button>¿Cómo se calcula la indemnización por despido improcedente?</button>
+              <button>¿Qué requisitos exige la responsabilidad civil extracontractual?</button>
+              <button>¿Duración mínima de un arrendamiento de vivienda?</button>
+              <button>¿A quién corresponde la carga de la prueba?</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-side">
+        <h3>Fuentes citadas</h3>
+        <div id="sources"><p class="note">Aparecerán aquí tras cada consulta.</p></div>
+      </div>
+    </div>
+    <form class="composer" id="form-consulta">
+      <textarea id="q" placeholder="Escribe tu consulta jurídica…" required></textarea>
+      <button class="btn" type="submit">Consultar</button>
+    </form>
+  </section>
+
+  <!-- REDACCION -->
+  <section class="view" id="view-redaccion">
+    <div class="view-head"><h2>✍️ Redacción de escritos</h2><p>Genera un borrador con fundamentos de derecho citados. Tú revisas y adaptas.</p></div>
+    <div class="view-body">
+      <div class="col-main">
+        <form id="form-redaccion">
+          <label for="tipo">Tipo de documento</label>
+          <select id="tipo">
+            <option value="demanda">Demanda civil</option>
+            <option value="contrato">Contrato</option>
+            <option value="recurso">Recurso</option>
+            <option value="requerimiento">Requerimiento / burofax</option>
+            <option value="clausula">Cláusula contractual</option>
+            <option value="dictamen">Dictamen / informe jurídico</option>
+          </select>
+          <label for="hechos">Hechos / contexto del caso</label>
+          <textarea id="hechos" rows="6" placeholder="Describe los hechos relevantes, las partes y lo que se pretende…" required></textarea>
+          <label for="instrucciones">Instrucciones adicionales (opcional)</label>
+          <textarea id="instrucciones" rows="2" placeholder="Tono, extensión, cláusulas concretas…"></textarea>
+          <div class="toolbar">
+            <button class="btn" type="submit">Generar borrador</button>
+            <button class="btn btn-ghost" type="button" id="copiar" style="display:none">Copiar</button>
+          </div>
+        </form>
+        <div id="draft-out"></div>
+      </div>
+      <div class="col-side">
+        <h3>Base normativa usada</h3>
+        <div id="draft-sources"><p class="note">Las normas citadas aparecerán aquí.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BIBLIOTECA -->
+  <section class="view" id="view-biblioteca">
+    <div class="view-head"><h2>📚 Biblioteca de fuentes</h2><p>Corpus jurídico indexado. En producción: BOE consolidado + jurisprudencia CENDOJ.</p></div>
+    <div class="view-body single">
+      <div class="col-main">
+        <input type="text" id="lib-search" placeholder="Filtrar por norma, materia o texto…" style="margin-bottom:18px" />
+        <div id="lib-list"><p class="note">Cargando corpus…</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section class="view" id="view-historial">
+    <div class="view-head"><h2>🕘 Historial de consultas</h2><p>Guardado en este navegador (local). Haz clic para reabrir.</p></div>
+    <div class="view-body single">
+      <div class="col-main">
+        <div class="toolbar" style="margin-bottom:16px"><button class="btn btn-ghost" id="clear-hist">Borrar historial</button></div>
+        <div id="hist-list"></div>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

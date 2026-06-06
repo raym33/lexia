@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lexia ⚖️ — IA jurídica open source para abogados</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="nav">
+    <span class="brand">Lexia <span class="accent">⚖</span></span>
+    <div class="links">
+      <a href="#producto">Producto</a>
+      <a href="#como">Cómo funciona</a>
+      <a href="#moat">Por qué local</a>
+      <a href="#waitlist">Despachos piloto</a>
+      <a class="btn" href="/app.html">Abrir la app →</a>
+    </div>
+  </div>
+
+  <section class="hero">
+    <span class="pill">IA open source · 100% local · sin enviar datos a terceros</span>
+    <h1>La IA jurídica que <span class="accent">no saca</span> los datos de tu despacho</h1>
+    <p class="sub">Lexia ahorra horas a los abogados en la búsqueda de legislación y jurisprudencia y en la redacción de escritos. Cada respuesta va <b>citada y verificable</b>, y todo corre en tu propia infraestructura: secreto profesional y RGPD por diseño.</p>
+    <div class="cta">
+      <a class="btn" href="/app.html">Probar la demo</a>
+      <a class="btn btn-ghost" href="#waitlist">Solicitar piloto para tu despacho</a>
+    </div>
+  </section>
+
+  <section class="section" id="producto">
+    <h2>Lo que hace por ti</h2>
+    <p class="lead">Un copiloto jurídico que entiende el lenguaje natural y responde con base normativa, no con invenciones.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">🔎</div><h3>Búsqueda inteligente</h3><p>Pregunta en lenguaje natural sobre legislación y jurisprudencia. Lexia recupera los preceptos relevantes y responde citando cada fuente.</p></div>
+      <div class="card"><div class="ico">✍️</div><h3>Redacción asistida</h3><p>Genera borradores de demandas, contratos, recursos o dictámenes con cláusulas y fundamentos de derecho citados, listos para revisar.</p></div>
+      <div class="card"><div class="ico">📚</div><h3>Fuentes verificables</h3><p>Cada afirmación enlaza a su norma oficial (BOE) o sentencia (CENDOJ). Cero alucinaciones: si no consta, te lo dice.</p></div>
+      <div class="card"><div class="ico">🔒</div><h3>Privado por diseño</h3><p>Modelos open source en tu servidor o en cloud soberana europea. Los datos de tus clientes nunca salen ni entrenan modelos de terceros.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="como">
+    <h2>Cómo funciona</h2>
+    <p class="lead">Tecnología RAG (Retrieval-Augmented Generation) afinada para derecho español.</p>
+    <div class="steps">
+      <div class="step"><h4>Preguntas</h4><p>Escribes tu consulta o los hechos del caso en lenguaje natural.</p></div>
+      <div class="step"><h4>Recupera</h4><p>El motor busca por significado en el corpus de legislación y jurisprudencia.</p></div>
+      <div class="step"><h4>Redacta</h4><p>Un LLM open source genera la respuesta o el escrito citando cada precepto.</p></div>
+      <div class="step"><h4>Verificas</h4><p>Revisas las citas enlazadas a la fuente oficial y conservas el control.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="moat">
+    <h2>Por qué open source y local es la ventaja</h2>
+    <p class="lead">No es una limitación: es lo que ningún SaaS cerrado puede ofrecer.</p>
+    <div class="moat">
+      <div class="card"><h3>Secreto profesional + RGPD</h3><p>Los despachos no pueden mandar datos de clientes a servidores de terceros. Lexia se despliega on-premise o en cloud europea soberana.</p></div>
+      <div class="card"><h3>Sin dependencia ni coste por token</h3><p>Modelos abiertos (Llama, Qwen, Mistral) que controlas tú. El coste no escala con cada consulta a un proveedor externo.</p></div>
+      <div class="card"><h3>El valor está en el dato y el flujo</h3><p>El moat no es el modelo —es intercambiable— sino el corpus jurídico estructurado, el RAG con citas verificables y la integración en el día a día del despacho.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="waitlist">
+    <h2>Despachos piloto</h2>
+    <p class="lead">Estamos seleccionando despachos para el programa piloto. Déjanos tu contacto.</p>
+    <form class="waitlist" id="wl">
+      <input type="email" id="email" placeholder="Email profesional" required />
+      <input type="text" id="despacho" placeholder="Despacho / área de práctica (opcional)" />
+      <textarea id="mensaje" placeholder="¿Qué te haría ahorrar más tiempo? (opcional)"></textarea>
+      <button class="btn" type="submit" style="width:100%">Solicitar acceso al piloto</button>
+      <p class="note" id="wlmsg" style="margin-top:12px"></p>
+    </form>
+  </section>
+
+  <footer>
+    Lexia ⚖️ — IA jurídica open source. Demo técnica; no sustituye el criterio del letrado.
+    Corpus reducido (CE, CC, ET, LAU, LEC); en producción se ingesta BOE consolidado y jurisprudencia del CENDOJ.
+  </footer>
+
+<script>
+document.getElementById('wl').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('wlmsg');
+  msg.textContent = 'Enviando…'; msg.className = 'note';
+  try {
+    const r = await fetch('/api/waitlist', {
+      method: 'POST', headers: {'content-type':'application/json'},
+      body: JSON.stringify({
+        email: document.getElementById('email').value,
+        despacho: document.getElementById('despacho').value,
+        mensaje: document.getElementById('mensaje').value,
+      })
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    msg.textContent = '✓ ¡Gracias! Te contactaremos para el piloto.';
+    msg.className = 'note msg-ok';
+    e.target.reset();
+  } catch (err) {
+    msg.textContent = 'Error: ' + err.message;
+    msg.className = 'note msg-err';
+  }
+});
+</script>
+</body>
+</html>
