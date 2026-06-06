@@ -1,91 +1,174 @@
-// Lexia — ingestor del BOE (datos abiertos)
-// Descarga el texto CONSOLIDADO de leyes españolas desde la API de datos abiertos
-// del BOE y lo trocea por artículos en corpus/boe.json (un fragmento por artículo,
-// con su cita y enlace a la fuente oficial).
+// Lexia — ingestor del BOE (datos abiertos), dirigido por catálogo, resumible.
+// Objetivo: cubrir TODAS las leyes estatales (Ley, Ley Orgánica, Real Decreto
+// Legislativo) del BOE consolidado, por lotes, sin rehacer lo ya ingerido.
 //
-// Uso:  node ingest.mjs
-// API:  https://www.boe.es/datosabiertos/api/legislacion-consolidada/id/{id}/texto
+// Uso:
+//   node ingest.mjs --index           # (re)construye el catálogo de leyes
+//   node ingest.mjs [--batch N]       # ingiere el siguiente lote (def. 100 leyes)
+//   node ingest.mjs --all [--batch N] # sigue ingiriendo lotes hasta acabar
+//
+// Ficheros (todos en corpus/, regenerables, fuera de git):
+//   _index_leyes.json   catálogo de leyes objetivo {id, abrev, num, titulo, rango}
+//   _ingested.json      manifiesto de ids de leyes ya procesadas
+//   boe.json            corpus de artículos acumulado (lo que consume el server)
 
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const OUT = join(__dirname, 'corpus', 'boe.json');
-const API = 'https://www.boe.es/datosabiertos/api/legislacion-consolidada/id';
+const C = (f) => join(__dirname, 'corpus', f);
+const API = 'https://www.boe.es/datosabiertos/api/legislacion-consolidada';
 
-// Leyes a ingestar (id consolidado del BOE + metadatos para la cita)
-const LEYES = [
-  { id: 'BOE-A-1978-31229', abrev: 'CE',  fuente: 'Constitución Española',                         rango: 'Constitucional', materia: 'Derecho constitucional' },
-  { id: 'BOE-A-1889-4763',  abrev: 'CC',  fuente: 'Código Civil',                                  rango: 'Ley',            materia: 'Derecho civil' },
-  { id: 'BOE-A-2015-11430', abrev: 'ET',  fuente: 'Estatuto de los Trabajadores (RDL 2/2015)',     rango: 'Ley',            materia: 'Derecho laboral' },
-  { id: 'BOE-A-1994-26003', abrev: 'LAU', fuente: 'Ley de Arrendamientos Urbanos (Ley 29/1994)',   rango: 'Ley',            materia: 'Arrendamientos urbanos' },
-  { id: 'BOE-A-2000-323',   abrev: 'LEC', fuente: 'Ley de Enjuiciamiento Civil (Ley 1/2000)',      rango: 'Ley',            materia: 'Derecho procesal civil' },
-  { id: 'BOE-A-1995-25444', abrev: 'CP',  fuente: 'Código Penal (LO 10/1995)',                     rango: 'Ley Orgánica',   materia: 'Derecho penal' },
+const RANGOS = { '1290': 'LO', '1300': 'Ley', '1310': 'RDLeg' }; // leyes objetivo
+// Abreviaturas "bonitas" para los códigos más usados (por id del BOE)
+const ABREV = {
+  'BOE-A-1978-31229': 'CE', 'BOE-A-1889-4763': 'CC', 'BOE-A-2015-11430': 'ET',
+  'BOE-A-1994-26003': 'LAU', 'BOE-A-2000-323': 'LEC', 'BOE-A-1995-25444': 'CP',
+  'BOE-A-1885-6627': 'CCom', 'BOE-A-2003-23186': 'LGT', 'BOE-A-2015-11724': 'LGSS',
+  'BOE-A-2015-10565': 'LPACAP', 'BOE-A-2015-10566': 'LRJSP', 'BOE-A-1998-16718': 'LJCA',
+  'BOE-A-2011-15936': 'LRJS', 'BOE-A-1978-31229b': 'CE',
+};
+
+// Códigos fundamentales cuyo rango NO es Ley/LO/RDLeg (se perderían en el filtro).
+// Se ingieren SIEMPRE y van primero.
+const SEEDS = [
+  { id: 'BOE-A-1978-31229', abrev: 'CE',   num: '', titulo: 'Constitución Española',  rango: 'Constitución' },
+  { id: 'BOE-A-1889-4763',  abrev: 'CC',   num: '', titulo: 'Código Civil',           rango: 'Real Decreto' },
+  { id: 'BOE-A-1885-6627',  abrev: 'CCom', num: '', titulo: 'Código de Comercio',      rango: 'Real Decreto' },
 ];
 
-const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&nbsp;': ' ' };
-function decode(s) {
-  return s
-    .replace(/&(amp|lt|gt|quot|apos|nbsp);/g, (m) => ENTITIES[m])
-    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
-}
-const stripTags = (s) => decode(s.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+const args = process.argv.slice(2);
+const flag = (n) => args.includes(n);
+const BATCH = Number((args[args.indexOf('--batch') + 1]) || 100);
 
-async function fetchTexto(id) {
-  const res = await fetch(`${API}/${id}/texto`, { headers: { Accept: 'application/xml' } });
-  if (!res.ok) throw new Error(`${id} texto ${res.status}`);
-  return res.text();
+const jget = async (url) => {
+  const r = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!r.ok) throw new Error(`${r.status} ${url}`);
+  return r.json();
+};
+const xget = async (url) => {
+  const r = await fetch(url, { headers: { Accept: 'application/xml' } });
+  if (!r.ok) throw new Error(`${r.status}`);
+  return r.text();
+};
+const readJSON = async (f, def) => (existsSync(C(f)) ? JSON.parse(await readFile(C(f), 'utf-8')) : def);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ---------------------------------------------------------------------------
+// 1) Catálogo de leyes
+// ---------------------------------------------------------------------------
+async function buildCatalogue() {
+  const leyes = [];
+  let off = 0, total = 0;
+  for (;;) {
+    const data = (await jget(`${API}?limit=500&offset=${off}`)).data;
+    if (!data || !data.length) break;
+    total += data.length;
+    for (const i of data) {
+      const rc = i.rango.codigo;
+      if (RANGOS[rc] && i.vigencia_agotada !== 'S') {
+        leyes.push({ id: i.identificador, abrev: RANGOS[rc], num: i.numero_oficial || '', titulo: i.titulo, rango: i.rango.texto });
+      }
+    }
+    off += 500;
+    process.stdout.write(`\r  catálogo: ${off} normas, ${leyes.length} leyes vigentes`);
+    await sleep(250);
+  }
+  await writeFile(C('_index_leyes.json'), JSON.stringify(leyes, null, 0));
+  console.log(`\n✓ Catálogo: ${leyes.length} leyes (de ${total} normas) → corpus/_index_leyes.json`);
+  return leyes;
+}
+
+// ---------------------------------------------------------------------------
+// 2) Parseo de una ley a artículos
+// ---------------------------------------------------------------------------
+const ENT = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'", '&nbsp;': ' ' };
+const decode = (s) => s.replace(/&(amp|lt|gt|quot|apos|nbsp);/g, (m) => ENT[m])
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
+  .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)));
+const strip = (s) => decode(s.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
+
+function etiqueta(ley) {
+  if (ABREV[ley.id]) return ABREV[ley.id];
+  if (ley.num) return `${ley.abrev} ${ley.num}`;
+  return ley.titulo.slice(0, 40);
 }
 
 function parseLaw(xml, ley) {
-  const chunks = [];
-  const blockRe = /<bloque id="([^"]*)" tipo="precepto"(?: titulo="([^"]*)")?>([\s\S]*?)<\/bloque>/g;
+  const et = etiqueta(ley);
+  const out = [];
+  const re = /<bloque id="([^"]*)" tipo="precepto"(?: titulo="([^"]*)")?>([\s\S]*?)<\/bloque>/g;
   let m;
-  while ((m = blockRe.exec(xml))) {
+  while ((m = re.exec(xml))) {
     const [, bid, titulo, body] = m;
-    // Quedarnos con la ÚLTIMA versión (texto consolidado vigente)
-    const versions = [...body.matchAll(/<version\b[^>]*>([\s\S]*?)<\/version>/g)];
-    const ver = versions.length ? versions[versions.length - 1][1] : body;
+    const vers = [...body.matchAll(/<version\b[^>]*>([\s\S]*?)<\/version>/g)];
+    const ver = vers.length ? vers[vers.length - 1][1] : body;
     const paras = [...ver.matchAll(/<p class="([^"]*)">([\s\S]*?)<\/p>/g)];
-    let articulo = '';
-    const parts = [];
+    let articulo = ''; const parts = [];
     for (const [, cls, raw] of paras) {
-      const txt = stripTags(raw);
-      if (!txt) continue;
-      if (cls === 'articulo') articulo = txt; else parts.push(txt);
+      const t = strip(raw); if (!t) continue;
+      if (cls === 'articulo') articulo = t; else parts.push(t);
     }
     const texto = parts.join('\n');
-    if (!texto || /\(suprimid|\(derogad/i.test(texto)) continue; // saltar artículos suprimidos/derogados
-    const etiqueta = (titulo || articulo).replace(/\.$/, '').trim();
-    const num = etiqueta.replace(/^art(?:[íi]culo)?\b\.?\s*/i, '').trim();
-    // "Art. 1902 CC" para artículos numerados; "Disposición transitoria… CC" para el resto
-    const cita = /^\d/.test(num) ? `Art. ${num} ${ley.abrev}` : `${etiqueta} ${ley.abrev}`;
-    chunks.push({
-      id: `${ley.abrev}-${bid}`,
-      fuente: ley.fuente,
+    if (!texto || /\(suprimid|\(derogad/i.test(texto)) continue;
+    const lab = (titulo || articulo).replace(/\.$/, '').trim();
+    const num = lab.replace(/^art(?:[íi]culo)?\b\.?\s*/i, '').trim();
+    const cita = /^\d/.test(num) ? `Art. ${num} ${et}` : `${lab} ${et}`;
+    out.push({
+      id: `${ley.id}#${bid}`,
+      fuente: ley.titulo,
       cita,
       rango: ley.rango,
-      materia: ley.materia,
+      materia: et,
       url: `https://www.boe.es/buscar/act.php?id=${ley.id}`,
-      texto: texto.slice(0, 3000), // recorte de seguridad para artículos muy largos
+      texto: texto.slice(0, 3000),
     });
   }
-  return chunks;
+  return out;
 }
 
-const all = [];
-for (const ley of LEYES) {
-  process.stdout.write(`Descargando ${ley.abrev} (${ley.fuente})… `);
-  try {
-    const xml = await fetchTexto(ley.id);
-    const chunks = parseLaw(xml, ley);
-    all.push(...chunks);
-    console.log(`${chunks.length} artículos`);
-  } catch (e) {
-    console.log(`ERROR: ${e.message}`);
+// ---------------------------------------------------------------------------
+// 3) Ingesta por lotes (resumible)
+// ---------------------------------------------------------------------------
+async function ingestBatch() {
+  let index = await readJSON('_index_leyes.json', null);
+  if (!index) index = await buildCatalogue();
+  // Semillas primero, sin duplicar las que ya estén en el catálogo
+  const ids = new Set(index.map((l) => l.id));
+  index = [...SEEDS.filter((s) => !ids.has(s.id)), ...index];
+  const done = new Set(await readJSON('_ingested.json', []));
+  const corpus = await readJSON('boe.json', []);
+
+  const pending = index.filter((l) => !done.has(l.id));
+  if (!pending.length) { console.log(`✓ Nada pendiente: ${done.size}/${index.length} leyes ya ingeridas, ${corpus.length} artículos.`); return false; }
+
+  const lote = pending.slice(0, BATCH);
+  console.log(`Ingiriendo lote de ${lote.length} leyes (pendientes: ${pending.length}, hechas: ${done.size}/${index.length})`);
+  let added = 0, fail = 0;
+  for (const ley of lote) {
+    try {
+      const xml = await xget(`${API}/id/${ley.id}/texto`);
+      const arts = parseLaw(xml, ley);
+      corpus.push(...arts); added += arts.length;
+    } catch (e) { fail++; }
+    done.add(ley.id);
+    await sleep(150);
   }
+  await writeFile(C('boe.json'), JSON.stringify(corpus));
+  await writeFile(C('_ingested.json'), JSON.stringify([...done]));
+  console.log(`✓ Lote hecho: +${added} artículos (${fail} leyes fallidas). Total: ${corpus.length} artículos, ${done.size}/${index.length} leyes.`);
+  return pending.length > lote.length; // ¿queda más?
 }
-await writeFile(OUT, JSON.stringify(all, null, 1));
-console.log(`\n✓ ${all.length} fragmentos escritos en corpus/boe.json`);
+
+// ---------------------------------------------------------------------------
+if (flag('--index')) {
+  await buildCatalogue();
+} else if (flag('--all')) {
+  let more = true;
+  while (more) more = await ingestBatch();
+  console.log('✓ Ingesta completa.');
+} else {
+  await ingestBatch();
+}

@@ -13,9 +13,11 @@ data/waitlist.json
 # - caché de embeddings (65 MB, regenerable)
 data/embeddings.json
 
-# Corpus jurídico masivo (regenerable con `node ingest.mjs`)
-# Se excluye hasta revisar licencia/tamaño para versionarlo.
+# Corpus jurídico masivo y ficheros de trabajo del ingestor (regenerables con
+# `node ingest.mjs`). Se excluyen hasta revisar licencia/tamaño para versionarlos.
 corpus/boe.json
+corpus/_index_leyes.json
+corpus/_ingested.json
 
 # Modelos / artefactos pesados
 *.gguf

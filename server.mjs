@@ -89,7 +89,8 @@ function cosine(a, b) {
 let INDEX = []; // [{ ...doc, embedding }]
 
 async function loadCorpus() {
-  const files = (await readdir(CORPUS_DIR)).filter((f) => f.endsWith('.json')).sort();
+  // Ficheros con prefijo "_" son de trabajo del ingestor (índice, manifiesto), no corpus.
+  const files = (await readdir(CORPUS_DIR)).filter((f) => f.endsWith('.json') && !f.startsWith('_')).sort();
   const docs = [];
   for (const f of files) {
     const arr = JSON.parse(await readFile(join(CORPUS_DIR, f), 'utf-8'));
@@ -100,23 +101,27 @@ async function loadCorpus() {
 
 async function buildIndex() {
   const corpus = await loadCorpus();
-  const sig = `${corpus.length}:${corpus[0]?.id}:${corpus[corpus.length - 1]?.id}`;
 
+  // Caché incremental por id: reutiliza embeddings ya calculados y solo embebe
+  // los fragmentos nuevos. Permite hacer crecer el corpus por lotes sin recalcular.
+  const prev = new Map();
   if (existsSync(CACHE_PATH)) {
     const cache = JSON.parse(await readFile(CACHE_PATH, 'utf-8'));
-    if (cache.model === EMBED_MODEL && cache.sig === sig) {
-      INDEX = cache.docs;
-      console.log(`✓ Índice cargado de caché (${INDEX.length} fragmentos)`);
-      return;
-    }
+    if (cache.model === EMBED_MODEL) for (const d of cache.docs) prev.set(d.id, d.embedding);
   }
 
-  console.log(`Embebiendo corpus (${corpus.length} fragmentos) con ${EMBED_MODEL}…`);
-  const inputs = corpus.map((d) => `${d.cita} — ${d.materia}\n${d.texto}`);
-  const vectors = await embedBatched(inputs);
-  INDEX = corpus.map((d, i) => ({ ...d, embedding: vectors[i] }));
-  await writeFile(CACHE_PATH, JSON.stringify({ model: EMBED_MODEL, sig, docs: INDEX }));
-  console.log(`✓ Índice construido y cacheado (${INDEX.length} fragmentos)`);
+  const missing = corpus.filter((d) => !prev.has(d.id));
+  if (missing.length) {
+    console.log(`Embebiendo ${missing.length} fragmentos nuevos (de ${corpus.length}) con ${EMBED_MODEL}…`);
+    const vectors = await embedBatched(missing.map((d) => `${d.cita} — ${d.materia}\n${d.texto}`));
+    missing.forEach((d, i) => prev.set(d.id, vectors[i]));
+  } else {
+    console.log(`✓ Sin fragmentos nuevos que embeber (${corpus.length})`);
+  }
+
+  INDEX = corpus.map((d) => ({ ...d, embedding: prev.get(d.id) }));
+  await writeFile(CACHE_PATH, JSON.stringify({ model: EMBED_MODEL, docs: INDEX }));
+  console.log(`✓ Índice listo (${INDEX.length} fragmentos)`);
 }
 
 // ---------------------------------------------------------------------------
