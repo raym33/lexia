@@ -163,6 +163,10 @@ const SYN = {
   arrendatario: ['inquilino'], inquilino: ['arrendatario'],
   desistimiento: ['desistir'], desistir: ['desistimiento'],
   apropiacion: ['apropiar', 'apropiaren'],
+  // Nombres doctrinales que NO aparecen literalmente en el articulado (van en la
+  // rúbrica/margen): se mapean a las palabras con que la ley realmente los redacta.
+  disciplinario: ['incumplimiento', 'culpable'],   // despido disciplinario -> Art. 54 ET
+  eximente: ['exento'], eximentes: ['exento'],      // eximentes -> "exentos de responsabilidad" (Art. 20 CP)
 };
 const tokenize = (s) => {
   const base = (norm(s).match(/[a-z0-9ñ]{3,}/g) || []).filter((t) => !STOP.has(t)).map(stem);
