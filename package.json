@@ -4,6 +4,9 @@
   "description": "Lexia — IA jurídica open source para abogados (España). RAG sobre legislación y jurisprudencia con citas verificables, 100% local sobre LM Studio.",
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "ingest": "node ingest.mjs --all",
+    "embed": "node embed.mjs",
+    "eval": "node eval/busquedas.mjs"
   }
 }

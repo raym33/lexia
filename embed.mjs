@@ -24,7 +24,7 @@ const IDS = join(__dirname, 'data', 'embeddings.ids.txt');
 const META = join(__dirname, 'data', 'embeddings.meta.json');
 
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
-const EMBED_MODEL = process.env.EMBED_MODEL || 'text-embedding-nomic-embed-text-v1.5';
+const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3';
 const args = process.argv.slice(2);
 const bi = args.indexOf('--batch');
 const BATCH = bi >= 0 ? Number(args[bi + 1]) : 96;

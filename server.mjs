@@ -27,7 +27,7 @@ const META_PATH = join(__dirname, 'data', 'embeddings.meta.json');
 const PORT = process.env.PORT || 5174;
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
 const CHAT_MODEL = process.env.CHAT_MODEL || 'gemma-3-12b-it-qat';
-const EMBED_MODEL = process.env.EMBED_MODEL || 'text-embedding-nomic-embed-text-v1.5';
+const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3';
 // Modelo rápido para expansión de consulta y reranking (puente lego->legal + precisión)
 const FAST_MODEL = process.env.FAST_MODEL || 'qwen2.5-7b-instruct';
 const TOP_K = Number(process.env.TOP_K || 6);
