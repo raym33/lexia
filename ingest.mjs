@@ -116,11 +116,13 @@ function parseLaw(xml, ley) {
       // Detecta nivel y rúbrica (clases libro_tit, titulo_tit, capitulo_tit, seccion_tit…)
       let level = null, num = '', tit = '';
       for (const [, cls, raw] of paras) {
-        const mm = cls.match(/^(parte|libro|titulo|capitulo|seccion|subseccion)_(num|tit)$/);
-        if (!mm) continue;
         const t = strip(raw); if (!t) continue;
-        level = mm[1];
-        if (mm[2] === 'tit') tit = t; else num = t;
+        // Forma separada: capitulo_num + capitulo_tit
+        let mm = cls.match(/^(parte|libro|titulo|capitulo|seccion|subseccion)_(num|tit)$/);
+        if (mm) { level = mm[1]; if (mm[2] === 'tit') tit = t; else num = t; continue; }
+        // Forma combinada: <p class="seccion">Sección 2.ª bis De la apropiación indebida</p>
+        mm = cls.match(/^(parte|libro|titulo|capitulo|seccion|subseccion)$/);
+        if (mm) { level = mm[1]; tit = t; }
       }
       if (level != null) {
         const lv = LEVELS[level];

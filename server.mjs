@@ -35,7 +35,9 @@ const RECALL_N = Number(process.env.RECALL_N || 40); // candidatos antes de rera
 // Por defecto ON con bge-m3: con buen embedder los candidatos mejoran y el
 // rerank/expansión SUMAN en evaluación amplia (50 consultas: Hit@8 41->44, Hit@3 33->35).
 // Desactivables con USE_EXPAND=0 / USE_RERANK=0 (p.ej. para latencia mínima).
-const USE_EXPAND = process.env.USE_EXPAND !== '0';
+// Expansión OFF por defecto: con bge-m3 la expansión LLM degradaba el recall
+// (metía términos amplios que enterraban el artículo correcto). Rerank ON.
+const USE_EXPAND = process.env.USE_EXPAND === '1';
 const USE_RERANK = process.env.USE_RERANK !== '0';
 
 const MIME = {
