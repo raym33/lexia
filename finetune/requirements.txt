@@ -1,0 +1,6 @@
+# Fine-tuning local (LoRA) de bge-m3 en Apple Silicon (MPS)
+sentence-transformers>=3.3
+peft>=0.11
+datasets>=2
+accelerate
+# torch con soporte MPS viene por defecto en macOS arm64

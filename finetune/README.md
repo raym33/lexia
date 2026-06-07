@@ -20,7 +20,13 @@ doctrinal no aparece en el texto de la ley (p. ej. "despido disciplinario" → A
    - Resumible (manifiesto de artículos hechos). Lento en local (LLM por artículo):
      ~5.000-20.000 artículos × 3 preguntas. Correr en background.
 
-2. **Entrenar** (GPU cloud recomendado): `finetune/train.py`
+2a. **Entrenar LOCAL con LoRA** (sin nube, en tu Mac): `finetune/train_lora.py`
+   - LoRA entrena solo adaptadores → cabe en 16 GB y va razonable en MPS.
+   - `python3 -m venv finetune/.venv && source finetune/.venv/bin/activate`
+   - `pip install -r finetune/requirements.txt`
+   - `python finetune/train_lora.py`  (entrena de noche; guarda modelo fusionado en `out/`)
+
+2b. **Entrenar en GPU cloud** (más rápido, one-off): `finetune/train.py`
    - Fine-tune de `BAAI/bge-m3` con `FlagEmbedding`/`sentence-transformers`
      (contrastive / in-batch negatives + hard negatives).
    - En Mac (MPS) es lento/inestable; en una GPU (A100, ~1-2 €/h) son ~1-4 h.
