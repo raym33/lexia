@@ -28,7 +28,15 @@ const PORT = process.env.PORT || 5174;
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
 const CHAT_MODEL = process.env.CHAT_MODEL || 'gemma-3-12b-it-qat';
 const EMBED_MODEL = process.env.EMBED_MODEL || 'text-embedding-nomic-embed-text-v1.5';
+// Modelo rápido para expansión de consulta y reranking (puente lego->legal + precisión)
+const FAST_MODEL = process.env.FAST_MODEL || 'qwen2.5-7b-instruct';
 const TOP_K = Number(process.env.TOP_K || 6);
+const RECALL_N = Number(process.env.RECALL_N || 40); // candidatos antes de rerank
+// Por defecto OFF: en evaluación amplia (50 consultas) el rerank/expansión con
+// modelos locales pequeños hacían overfitting y bajaban la generalización (35 vs 38).
+// Se activan con USE_RERANK=1 / USE_EXPAND=1 cuando se disponga de un reranker mejor.
+const USE_EXPAND = process.env.USE_EXPAND === '1';
+const USE_RERANK = process.env.USE_RERANK === '1';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -52,15 +60,28 @@ async function embed(texts) {
   return json.data.map((d) => d.embedding);
 }
 
-async function chat(messages, { temperature = 0.1 } = {}) {
+async function chat(messages, { temperature = 0.1, model = CHAT_MODEL, max_tokens } = {}) {
   const res = await fetch(`${LM_BASE}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: CHAT_MODEL, messages, temperature, stream: false }),
+    body: JSON.stringify({ model, messages, temperature, stream: false, ...(max_tokens ? { max_tokens } : {}) }),
   });
   if (!res.ok) throw new Error(`chat ${res.status}: ${await res.text()}`);
   const json = await res.json();
   return json.choices[0].message.content;
+}
+
+// Expansión de consulta: traduce el lenguaje del usuario a la terminología jurídica
+// con la que se redacta la ley (mejora el recall del BM25). Devuelve palabras clave.
+const EXPAND_SYS = `Eres un jurista español. Reescribe la consulta añadiendo los TÉRMINOS JURÍDICOS y sinónimos legales con los que la ley española realmente se redacta (sustantivos clave y verbos del articulado). Devuelve SOLO una línea de palabras clave separadas por espacios, sin explicaciones ni puntuación.`;
+async function expandQuery(query) {
+  try {
+    const out = await chat(
+      [{ role: 'system', content: EXPAND_SYS }, { role: 'user', content: query }],
+      { model: FAST_MODEL, temperature: 0, max_tokens: 80 },
+    );
+    return out.replace(/\n/g, ' ').slice(0, 300);
+  } catch { return ''; }
 }
 
 // ---------------------------------------------------------------------------
@@ -194,9 +215,10 @@ function bm25Map(query) {
   return sc;
 }
 
-async function retrieve(query, k = TOP_K) {
+async function retrieve(query, k = TOP_K, lexExtra = '') {
   if (!INDEX.length) return [];
-  const [qv] = await embed([query]);
+  const [qv] = await embed([query]);             // vector: consulta original (semántica limpia)
+  const lexQuery = lexExtra ? `${query} ${lexExtra}` : query; // léxico: + expansión jurídica
   const n = INDEX.length;
   // Vectorial: coseno sobre todo el índice
   const vraw = new Float64Array(n);
@@ -204,7 +226,7 @@ async function retrieve(query, k = TOP_K) {
   for (let i = 0; i < n; i++) { const v = cosineRow(qv, INDEX[i].row); vraw[i] = v; if (v < vmn) vmn = v; if (v > vmx) vmx = v; }
   const vr = (vmx - vmn) || 1;
   // Léxico: BM25 disperso
-  const bm = bm25Map(query);
+  const bm = bm25Map(lexQuery);
   let bmx = 0; for (const v of bm.values()) if (v > bmx) bmx = v; bmx = bmx || 1;
   // Combinación 50/50 normalizada
   const scored = new Array(n);
@@ -215,6 +237,37 @@ async function retrieve(query, k = TOP_K) {
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, k);
+}
+
+// Re-ranker: un LLM jurista reordena los candidatos por relevancia real a la consulta.
+// Corrige los casos "el artículo correcto estaba, pero mal posicionado".
+const RERANK_SYS = `Eres un jurista español experto. Te doy una CONSULTA y una lista numerada de artículos candidatos. Ordena los que responden de forma MÁS DIRECTA y precisa, priorizando el artículo que REGULA O DEFINE la institución jurídica concreta por la que se pregunta (la regla general de la materia), por encima de artículos que solo la mencionan de pasada. Devuelve SOLO los números, del más relevante al menos, separados por comas (máximo 8). Sin explicaciones.`;
+async function rerankLLM(query, hits, k = TOP_K) {
+  if (hits.length <= 1) return hits.slice(0, k);
+  const list = hits.map((h, i) => {
+    const ctx = h.doc.contexto ? ` (${h.doc.contexto})` : '';
+    return `[${i + 1}] ${h.doc.cita}${ctx}: ${h.doc.texto.slice(0, 300).replace(/\n/g, ' ')}`;
+  }).join('\n');
+  let out;
+  try {
+    out = await chat(
+      [{ role: 'system', content: RERANK_SYS }, { role: 'user', content: `CONSULTA: ${query}\n\nCANDIDATOS:\n${list}` }],
+      { model: FAST_MODEL, temperature: 0, max_tokens: 60 },
+    );
+  } catch { return hits.slice(0, k); }
+  const order = (out.match(/\d+/g) || []).map(Number).filter((x) => x >= 1 && x <= hits.length);
+  const seen = new Set(); const ranked = [];
+  for (const idx of order) if (!seen.has(idx)) { seen.add(idx); ranked.push(hits[idx - 1]); }
+  hits.forEach((h, i) => { if (!seen.has(i + 1)) ranked.push(h); }); // no mencionados, al final
+  return ranked.slice(0, k);
+}
+
+// Pipeline de búsqueda: expansión léxica -> recuperación amplia -> rerank.
+async function search(query, k = TOP_K) {
+  const ext = USE_EXPAND ? await expandQuery(query) : '';
+  let hits = await retrieve(query, USE_RERANK ? RECALL_N : k, ext);
+  if (USE_RERANK && hits.length) hits = await rerankLLM(query, hits, k);
+  return hits;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +308,7 @@ async function handleConsulta(req, res) {
   }
 
   const t0 = Date.now();
-  const hits = await retrieve(query);
+  const hits = await search(query);
   const messages = buildMessages(query, hits);
   const answer = await chat(messages);
   const ms = Date.now() - t0;
@@ -279,7 +332,7 @@ async function handleBuscar(req, res) {
   const { query, k } = await readBody(req);
   if (!query || !query.trim()) return json(res, 400, { error: 'Falta la consulta' });
   const t0 = Date.now();
-  const hits = await retrieve(query, Math.min(Number(k) || TOP_K, 20));
+  const hits = await search(query, Math.min(Number(k) || TOP_K, 20));
   const fuentes = hits.map((h, i) => ({
     n: i + 1, cita: h.doc.cita, fuente: h.doc.fuente, materia: h.doc.materia,
     rango: h.doc.rango, url: h.doc.url, score: Number(h.score.toFixed(3)),
@@ -350,7 +403,7 @@ async function handleRedactar(req, res) {
   const t0 = Date.now();
   const tipoNombre = TIPOS_ESCRITO[tipo] || tipo;
   // Recuperamos normas relevantes a partir de los hechos + el tipo de escrito
-  const hits = await retrieve(`${tipoNombre}. ${hechos} ${instrucciones}`, TOP_K);
+  const hits = await search(`${tipoNombre}. ${hechos} ${instrucciones}`, TOP_K);
   const contexto = hits
     .map((h, i) => `[${i + 1}] ${h.doc.cita} (${h.doc.fuente})\n${h.doc.texto}`)
     .join('\n\n');
