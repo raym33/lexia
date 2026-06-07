@@ -237,7 +237,7 @@ function bm25Map(query) {
   return sc;
 }
 
-async function retrieve(query, k = TOP_K, lexExtra = '') {
+async function retrieve(query, k = TOP_K, lexExtra = '', reserveCanon = false) {
   if (!INDEX.length) return [];
   const [qv] = await embed([query]);             // vector: consulta original (semántica limpia)
   const lexQuery = lexExtra ? `${query} ${lexExtra}` : query; // léxico: + expansión jurídica
@@ -258,7 +258,16 @@ async function retrieve(query, k = TOP_K, lexExtra = '') {
     scored[i] = { doc: INDEX[i], score: (0.62 * lN + 0.38 * vN) * (AUTH ? AUTH[i] : 1) };
   }
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, k);
+  const general = scored.slice(0, k);
+  // Reserva de plazas para fuentes canónicas: garantiza que los mejores artículos de
+  // códigos/CE entren al pool del reranker aunque el ruido sectorial los baje (mejora
+  // el recall de artículos fundamentales como 24 CE, 20 CP, 54 ET).
+  if (reserveCanon) {
+    const have = new Set(general.map((s) => s.doc.id));
+    const canon = scored.filter((s) => CANON.has(s.doc.materia) && !have.has(s.doc.id)).slice(0, 15);
+    return [...general, ...canon];
+  }
+  return general;
 }
 
 // Re-ranker: un LLM jurista reordena los candidatos por relevancia real a la consulta.
@@ -300,19 +309,30 @@ async function rerankCE(query, hits, k = TOP_K) {
     console.error(`rerank fallo (${e.message}); uso orden híbrido`);
     return hits.slice(0, k);
   }
-  // Bonus de autoridad: el cross-encoder solo mide relevancia textual y tiende a
-  // preferir leyes sectoriales sobre el artículo fundamental breve (p. ej. Art. 27 CE).
-  // Reintroducimos la jerarquía de fuentes para desempatar hacia lo canónico.
-  const authBonus = (d) => (CANON.has(d.materia) ? 2.5 : d.rango === 'Ley Orgánica' ? 0.6 : 0);
-  results.sort((a, b) =>
-    (b.relevance_score + authBonus(hits[b.index].doc)) - (a.relevance_score + authBonus(hits[a.index].doc)));
-  return results.map((res) => hits[res.index]).filter(Boolean).slice(0, k);
+  // ENSEMBLE: combina cross-encoder + puntuación HÍBRIDA + bonus de autoridad.
+  // No dejes que el cross-encoder mande solo: a veces degrada aciertos que el híbrido
+  // clava (24 CE, 28 CE, 379 CP estaban en el puesto 1 del híbrido). El bonus prioriza
+  // el artículo fundamental (CE/códigos) sobre leyes sectoriales.
+  const ce = new Float64Array(hits.length).fill(-Infinity);
+  for (const r of results) ce[r.index] = r.relevance_score;
+  const finite = [...ce].filter((x) => Number.isFinite(x));
+  const cmin = Math.min(...finite), cmax = Math.max(...finite), cr = (cmax - cmin) || 1;
+  const hy = hits.map((h) => h.score);
+  const hmin = Math.min(...hy), hmax = Math.max(...hy), hr = (hmax - hmin) || 1;
+  const authBonus = (d) => (CANON.has(d.materia) ? 0.25 : d.rango === 'Ley Orgánica' ? 0.05 : 0);
+  const ranked = hits.map((h, i) => {
+    const ceN = Number.isFinite(ce[i]) ? (ce[i] - cmin) / cr : 0;
+    const hyN = (h.score - hmin) / hr;
+    return { h, s: 0.65 * ceN + 0.35 * hyN + authBonus(h.doc) };
+  });
+  ranked.sort((a, b) => b.s - a.s);
+  return ranked.map((r) => r.h).slice(0, k);
 }
 
 // Pipeline de búsqueda: expansión léxica -> recuperación amplia -> rerank cross-encoder.
 async function search(query, k = TOP_K) {
   const ext = USE_EXPAND ? await expandQuery(query) : '';
-  let hits = await retrieve(query, USE_RERANK ? RECALL_N : k, ext);
+  let hits = await retrieve(query, USE_RERANK ? RECALL_N : k, ext, USE_RERANK);
   if (USE_RERANK && hits.length) hits = await rerankCE(query, hits, k);
   return hits;
 }
