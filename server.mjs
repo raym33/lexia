@@ -32,11 +32,11 @@ const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3';
 const FAST_MODEL = process.env.FAST_MODEL || 'qwen2.5-7b-instruct';
 const TOP_K = Number(process.env.TOP_K || 6);
 const RECALL_N = Number(process.env.RECALL_N || 40); // candidatos antes de rerank
-// Por defecto OFF: en evaluación amplia (50 consultas) el rerank/expansión con
-// modelos locales pequeños hacían overfitting y bajaban la generalización (35 vs 38).
-// Se activan con USE_RERANK=1 / USE_EXPAND=1 cuando se disponga de un reranker mejor.
-const USE_EXPAND = process.env.USE_EXPAND === '1';
-const USE_RERANK = process.env.USE_RERANK === '1';
+// Por defecto ON con bge-m3: con buen embedder los candidatos mejoran y el
+// rerank/expansión SUMAN en evaluación amplia (50 consultas: Hit@8 41->44, Hit@3 33->35).
+// Desactivables con USE_EXPAND=0 / USE_RERANK=0 (p.ej. para latencia mínima).
+const USE_EXPAND = process.env.USE_EXPAND !== '0';
+const USE_RERANK = process.env.USE_RERANK !== '0';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
