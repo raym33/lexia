@@ -32,6 +32,9 @@ const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3';
 const FAST_MODEL = process.env.FAST_MODEL || 'qwen2.5-7b-instruct';
 const TOP_K = Number(process.env.TOP_K || 6);
 const RECALL_N = Number(process.env.RECALL_N || 40); // candidatos antes de rerank
+// Reranker cross-encoder determinista (llama.cpp server con --reranking). Sustituye
+// al reranker-LLM (que tenía ruido). Endpoint /v1/rerank.
+const RERANK_URL = process.env.RERANK_URL || 'http://127.0.0.1:1235/v1/rerank';
 // Por defecto ON con bge-m3: con buen embedder los candidatos mejoran y el
 // rerank/expansión SUMAN en evaluación amplia (50 consultas: Hit@8 41->44, Hit@3 33->35).
 // Desactivables con USE_EXPAND=0 / USE_RERANK=0 (p.ej. para latencia mínima).
@@ -149,7 +152,24 @@ function stem(t) {
   if (t.length > 4 && t.endsWith('s')) return t.slice(0, -1);
   return t;
 }
-const tokenize = (s) => (norm(s).match(/[a-z0-9ñ]{3,}/g) || []).filter((t) => !STOP.has(t)).map(stem);
+// Equivalencias jurídicas deterministas: puente entre el lenguaje del usuario y el de
+// la ley, SIN el ruido de la expansión LLM. Se aplican igual a índice y consulta, así
+// que cualquier variante casa con la otra (p. ej. "compraventa" <-> "compra y venta").
+const SYN = {
+  compraventa: ['compra', 'venta'],
+  nulidad: ['nulo'], nulo: ['nulidad'],
+  mayoria: ['mayor'],
+  arrendamiento: ['alquiler'], alquiler: ['arrendamiento'],
+  arrendatario: ['inquilino'], inquilino: ['arrendatario'],
+  desistimiento: ['desistir'], desistir: ['desistimiento'],
+  apropiacion: ['apropiar', 'apropiaren'],
+};
+const tokenize = (s) => {
+  const base = (norm(s).match(/[a-z0-9ñ]{3,}/g) || []).filter((t) => !STOP.has(t)).map(stem);
+  const out = [];
+  for (const t of base) { out.push(t); if (Object.hasOwn(SYN, t)) for (const e of SYN[t]) out.push(e); }
+  return out;
+};
 
 let LEX = null; // { inv: Map(term -> [docIdx, tf, ...]), idf, len: Float64Array, avgdl }
 function buildLexical() {
@@ -264,11 +284,36 @@ async function rerankLLM(query, hits, k = TOP_K) {
   return ranked.slice(0, k);
 }
 
-// Pipeline de búsqueda: expansión léxica -> recuperación amplia -> rerank.
+// Reranker cross-encoder DETERMINISTA (bge-reranker-v2-m3 vía llama.cpp).
+// Juzga query+documento conjuntamente; mucho más preciso y sin ruido que el LLM-juez.
+async function rerankCE(query, hits, k = TOP_K) {
+  const documents = hits.map((h) => `${h.doc.cita}. ${h.doc.contexto || ''}. ${h.doc.texto.slice(0, 500)}`);
+  let results;
+  try {
+    const r = await fetch(RERANK_URL, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query, documents }),
+    });
+    if (!r.ok) throw new Error(`rerank ${r.status}`);
+    results = (await r.json()).results;
+  } catch (e) {
+    console.error(`rerank fallo (${e.message}); uso orden híbrido`);
+    return hits.slice(0, k);
+  }
+  // Bonus de autoridad: el cross-encoder solo mide relevancia textual y tiende a
+  // preferir leyes sectoriales sobre el artículo fundamental breve (p. ej. Art. 27 CE).
+  // Reintroducimos la jerarquía de fuentes para desempatar hacia lo canónico.
+  const authBonus = (d) => (CANON.has(d.materia) ? 2.5 : d.rango === 'Ley Orgánica' ? 0.6 : 0);
+  results.sort((a, b) =>
+    (b.relevance_score + authBonus(hits[b.index].doc)) - (a.relevance_score + authBonus(hits[a.index].doc)));
+  return results.map((res) => hits[res.index]).filter(Boolean).slice(0, k);
+}
+
+// Pipeline de búsqueda: expansión léxica -> recuperación amplia -> rerank cross-encoder.
 async function search(query, k = TOP_K) {
   const ext = USE_EXPAND ? await expandQuery(query) : '';
   let hits = await retrieve(query, USE_RERANK ? RECALL_N : k, ext);
-  if (USE_RERANK && hits.length) hits = await rerankLLM(query, hits, k);
+  if (USE_RERANK && hits.length) hits = await rerankCE(query, hits, k);
   return hits;
 }
 
