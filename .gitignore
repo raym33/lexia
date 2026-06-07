@@ -36,3 +36,4 @@ tmp/
 # Sistema operativo
 .DS_Store
 Thumbs.db
+finetune/data/
