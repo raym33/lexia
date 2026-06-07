@@ -15,6 +15,7 @@ import { readFile, writeFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { register, login, currentUser, signSession, sessionCookie, clearCookie } from './auth.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PUBLIC_DIR = join(__dirname, 'public');
@@ -247,6 +248,45 @@ async function readBody(req) {
   return body ? JSON.parse(body) : {};
 }
 
+// ---------------------------------------------------------------------------
+// Autenticación (cuentas de despachos)
+// ---------------------------------------------------------------------------
+const json = (res, code, obj, headers = {}) => {
+  res.writeHead(code, { 'content-type': 'application/json', ...headers });
+  res.end(JSON.stringify(obj));
+};
+
+async function handleRegister(req, res) {
+  try {
+    const user = await register(await readBody(req));
+    json(res, 200, { user }, { 'set-cookie': sessionCookie(signSession(user)) });
+  } catch (e) { json(res, 400, { error: e.message }); }
+}
+
+async function handleLogin(req, res) {
+  try {
+    const user = await login(await readBody(req));
+    json(res, 200, { user }, { 'set-cookie': sessionCookie(signSession(user)) });
+  } catch (e) { json(res, 401, { error: e.message }); }
+}
+
+function handleLogout(req, res) {
+  json(res, 200, { ok: true }, { 'set-cookie': clearCookie() });
+}
+
+function handleMe(req, res) {
+  const u = currentUser(req);
+  if (!u) return json(res, 401, { error: 'No autenticado' });
+  json(res, 200, { user: { id: u.id, email: u.email, despacho: u.despacho, role: u.role } });
+}
+
+// Guard: exige sesión válida; si no, 401.
+function requireAuth(req, res) {
+  const u = currentUser(req);
+  if (!u) { json(res, 401, { error: 'Inicia sesión para usar Lexia' }); return null; }
+  return u;
+}
+
 const TIPOS_ESCRITO = {
   demanda: 'Demanda civil',
   contrato: 'Contrato',
@@ -340,10 +380,18 @@ async function serveStatic(req, res) {
 
 const server = createServer(async (req, res) => {
   try {
-    if (req.method === 'POST' && req.url === '/api/consulta') return await handleConsulta(req, res);
-    if (req.method === 'POST' && req.url === '/api/redactar') return await handleRedactar(req, res);
-    if (req.method === 'GET' && req.url.split('?')[0] === '/api/fuentes') return handleFuentes(req, res);
+    // --- Auth (públicas) ---
+    if (req.method === 'POST' && req.url === '/api/register') return await handleRegister(req, res);
+    if (req.method === 'POST' && req.url === '/api/login') return await handleLogin(req, res);
+    if (req.method === 'POST' && req.url === '/api/logout') return handleLogout(req, res);
+    if (req.method === 'GET' && req.url === '/api/me') return handleMe(req, res);
     if (req.method === 'POST' && req.url === '/api/waitlist') return await handleWaitlist(req, res);
+
+    // --- App (requieren sesión) ---
+    if (req.method === 'POST' && req.url === '/api/consulta') { if (!requireAuth(req, res)) return; return await handleConsulta(req, res); }
+    if (req.method === 'POST' && req.url === '/api/redactar') { if (!requireAuth(req, res)) return; return await handleRedactar(req, res); }
+    if (req.method === 'GET' && req.url.split('?')[0] === '/api/fuentes') { if (!requireAuth(req, res)) return; return handleFuentes(req, res); }
+
     return await serveStatic(req, res);
   } catch (err) {
     console.error(err);

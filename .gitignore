@@ -10,6 +10,9 @@ node_modules/
 # Datos sensibles / privados (NO subir)
 # - leads de despachos
 data/waitlist.json
+# - cuentas (hashes de contraseña) y secreto de firma de sesiones
+data/users.json
+data/.session_secret
 # - store de embeddings (binario + ids + meta, regenerable con `node embed.mjs`)
 data/embeddings.*
 

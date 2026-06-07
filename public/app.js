@@ -1,6 +1,22 @@
 // Lexia — lógica de la app (vanilla JS, sin dependencias)
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+// ---------- Guard de sesión: sin login -> a /login.html ----------
+(async () => {
+  try {
+    const r = await fetch('/api/me');
+    if (!r.ok) { location.href = '/login.html'; return; }
+    const { user } = await r.json();
+    const e = document.getElementById('user-email'); if (e) e.textContent = user.email;
+    const d = document.getElementById('user-despacho'); if (d) d.textContent = `${user.despacho} · ${user.role}`;
+  } catch { location.href = '/login.html'; }
+})();
+document.getElementById('logout')?.addEventListener('click', async (e) => {
+  e.preventDefault();
+  await fetch('/api/logout', { method: 'POST' });
+  location.href = '/login.html';
+});
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const renderCites = (t) => esc(t).replace(/\[(\d+)\]/g, '<span class="cite" data-n="$1">[$1]</span>');
 
