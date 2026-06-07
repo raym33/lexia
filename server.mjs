@@ -118,7 +118,15 @@ function cosineRow(q, row) {
 // ---------------------------------------------------------------------------
 const STOP = new Set(('de la el en y a los las del que se un una por con no para es su al lo como mas o pero sus le ya este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante todos uno les ni contra otros ese eso ante ellos e esto entonces entre cual sea cualquier').split(' '));
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-const tokenize = (s) => norm(s).match(/[a-z0-9ñ]{3,}/g)?.filter((t) => !STOP.has(t)) || [];
+// Stemmer ligero ES: normaliza plurales y algunas flexiones para mejorar el recall
+// (p. ej. "hurtos"->"hurto", "muebles"->"mueble", "ajenas"->"ajena", "acciones"->"accion").
+function stem(t) {
+  if (t.length > 6 && t.endsWith('ciones')) return t.slice(0, -5) + 'on';
+  if (t.length > 5 && (t.endsWith('es') && /[lrndj]es$/.test(t))) return t.slice(0, -2);
+  if (t.length > 4 && t.endsWith('s')) return t.slice(0, -1);
+  return t;
+}
+const tokenize = (s) => (norm(s).match(/[a-z0-9ñ]{3,}/g) || []).filter((t) => !STOP.has(t)).map(stem);
 
 let LEX = null; // { inv: Map(term -> [docIdx, tf, ...]), idf, len: Float64Array, avgdl }
 function buildLexical() {
@@ -128,7 +136,7 @@ function buildLexical() {
   const df = new Map();
   const len = new Float64Array(N);
   for (let i = 0; i < N; i++) {
-    const toks = tokenize(`${INDEX[i].cita} ${INDEX[i].texto}`);
+    const toks = tokenize(`${INDEX[i].cita} ${INDEX[i].contexto || ''} ${INDEX[i].texto}`);
     len[i] = toks.length;
     const tf = new Map();
     for (const t of toks) tf.set(t, (tf.get(t) || 0) + 1);
@@ -142,7 +150,31 @@ function buildLexical() {
   for (const [t, n] of df) idf.set(t, Math.log(1 + (N - n + 0.5) / (n + 0.5)));
   let tot = 0; for (let i = 0; i < N; i++) tot += len[i];
   LEX = { inv, idf, len, avgdl: tot / N || 1 };
+  buildAuthority();
   console.log(`✓ BM25 (índice invertido): ${idf.size} términos`);
+}
+
+// Peso de AUTORIDAD por fuente: con 4.000+ leyes, los códigos fundamentales y los
+// artículos sustantivos deben pesar más que normas menores/forales y que
+// disposiciones (transitorias, adicionales, "bases"…). Mitiga que lo canónico
+// quede sepultado.
+const CANON = new Set([
+  'CE', 'CC', 'CP', 'CCom', 'ET', 'LEC', 'LAU', 'LGT', 'LGSS', 'LPACAP', 'LRJSP', 'LJCA', 'LRJS',
+  'LO 3/2018',     // Protección de datos (LOPDGDD)
+  'RDLeg 1/2007',  // Defensa de consumidores y usuarios (TRLGDCU)
+]);
+let AUTH = null;
+function buildAuthority() {
+  AUTH = new Float64Array(INDEX.length);
+  for (let i = 0; i < INDEX.length; i++) {
+    const d = INDEX[i];
+    let w = 1;
+    if (CANON.has(d.materia)) w *= 1.8;                       // códigos fundamentales
+    else if (d.rango === 'Ley Orgánica') w *= 1.15;
+    else if (d.rango === 'Real Decreto Legislativo') w *= 1.1;
+    w *= /^Art\.\s*\d/.test(d.cita) ? 1.2 : 0.6;             // artículo numerado vs disposición/base/foral
+    AUTH[i] = w;
+  }
 }
 
 function bm25Map(query) {
@@ -179,7 +211,7 @@ async function retrieve(query, k = TOP_K) {
   for (let i = 0; i < n; i++) {
     const vN = (vraw[i] - vmn) / vr;
     const lN = (bm.get(i) || 0) / bmx;
-    scored[i] = { doc: INDEX[i], score: 0.5 * lN + 0.5 * vN };
+    scored[i] = { doc: INDEX[i], score: (0.62 * lN + 0.38 * vN) * (AUTH ? AUTH[i] : 1) };
   }
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, k);
@@ -240,6 +272,19 @@ async function handleConsulta(req, res) {
 
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ answer, fuentes, ms, model: CHAT_MODEL }));
+}
+
+// Búsqueda sin LLM: solo recuperación (rápida). Útil para la UI y para evaluar.
+async function handleBuscar(req, res) {
+  const { query, k } = await readBody(req);
+  if (!query || !query.trim()) return json(res, 400, { error: 'Falta la consulta' });
+  const t0 = Date.now();
+  const hits = await retrieve(query, Math.min(Number(k) || TOP_K, 20));
+  const fuentes = hits.map((h, i) => ({
+    n: i + 1, cita: h.doc.cita, fuente: h.doc.fuente, materia: h.doc.materia,
+    rango: h.doc.rango, url: h.doc.url, score: Number(h.score.toFixed(3)),
+  }));
+  json(res, 200, { fuentes, ms: Date.now() - t0 });
 }
 
 async function readBody(req) {
@@ -389,6 +434,7 @@ const server = createServer(async (req, res) => {
 
     // --- App (requieren sesión) ---
     if (req.method === 'POST' && req.url === '/api/consulta') { if (!requireAuth(req, res)) return; return await handleConsulta(req, res); }
+    if (req.method === 'POST' && req.url === '/api/buscar') { if (!requireAuth(req, res)) return; return await handleBuscar(req, res); }
     if (req.method === 'POST' && req.url === '/api/redactar') { if (!requireAuth(req, res)) return; return await handleRedactar(req, res); }
     if (req.method === 'GET' && req.url.split('?')[0] === '/api/fuentes') { if (!requireAuth(req, res)) return; return handleFuentes(req, res); }
 

@@ -97,16 +97,40 @@ function etiqueta(ley) {
   return ley.titulo.slice(0, 40);
 }
 
+const LEVELS = { parte: 0, libro: 1, titulo: 2, capitulo: 3, seccion: 4, subseccion: 5 };
+
 function parseLaw(xml, ley) {
   const et = etiqueta(ley);
   const out = [];
-  const re = /<bloque id="([^"]*)" tipo="precepto"(?: titulo="([^"]*)")?>([\s\S]*?)<\/bloque>/g;
+  const stack = {}; // nivel -> rúbrica vigente (jerarquía: Libro > Título > Capítulo > Sección…)
+  // Iteramos TODOS los bloques en orden para arrastrar la jerarquía de rúbricas.
+  const re = /<bloque id="([^"]*)" tipo="([^"]*)"(?: titulo="([^"]*)")?>([\s\S]*?)<\/bloque>/g;
   let m;
   while ((m = re.exec(xml))) {
-    const [, bid, titulo, body] = m;
+    const [, bid, tipo, titulo, body] = m;
     const vers = [...body.matchAll(/<version\b[^>]*>([\s\S]*?)<\/version>/g)];
     const ver = vers.length ? vers[vers.length - 1][1] : body;
     const paras = [...ver.matchAll(/<p class="([^"]*)">([\s\S]*?)<\/p>/g)];
+
+    if (tipo === 'encabezado') {
+      // Detecta nivel y rúbrica (clases libro_tit, titulo_tit, capitulo_tit, seccion_tit…)
+      let level = null, num = '', tit = '';
+      for (const [, cls, raw] of paras) {
+        const mm = cls.match(/^(parte|libro|titulo|capitulo|seccion|subseccion)_(num|tit)$/);
+        if (!mm) continue;
+        const t = strip(raw); if (!t) continue;
+        level = mm[1];
+        if (mm[2] === 'tit') tit = t; else num = t;
+      }
+      if (level != null) {
+        const lv = LEVELS[level];
+        stack[lv] = tit || num;
+        for (const k of Object.keys(stack)) if (+k > lv) delete stack[k];
+      }
+      continue;
+    }
+    if (tipo !== 'precepto') continue;
+
     let articulo = ''; const parts = [];
     for (const [, cls, raw] of paras) {
       const t = strip(raw); if (!t) continue;
@@ -117,12 +141,14 @@ function parseLaw(xml, ley) {
     const lab = (titulo || articulo).replace(/\.$/, '').trim();
     const num = lab.replace(/^art(?:[íi]culo)?\b\.?\s*/i, '').trim();
     const cita = /^\d/.test(num) ? `Art. ${num} ${et}` : `${lab} ${et}`;
+    const contexto = Object.keys(stack).sort((a, b) => a - b).map((k) => stack[k]).join(' · ');
     out.push({
       id: `${ley.id}#${bid}`,
       fuente: ley.titulo,
       cita,
       rango: ley.rango,
       materia: et,
+      contexto,                  // rúbricas de Libro/Título/Capítulo/Sección (mejora la búsqueda léxica)
       url: `https://www.boe.es/buscar/act.php?id=${ley.id}`,
       texto: texto.slice(0, 3000),
     });
