@@ -24,13 +24,14 @@ const IDS = join(__dirname, 'data', 'embeddings.ids.txt');
 const META = join(__dirname, 'data', 'embeddings.meta.json');
 
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
+const EMBED_BASE = process.env.EMBED_BASE || LM_BASE;  // embedder afinado en :1236 si se indica
 const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3';
 const args = process.argv.slice(2);
 const bi = args.indexOf('--batch');
 const BATCH = bi >= 0 ? Number(args[bi + 1]) : 96;
 
 async function embed(texts) {
-  const r = await fetch(`${LM_BASE}/embeddings`, {
+  const r = await fetch(`${EMBED_BASE}/embeddings`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ model: EMBED_MODEL, input: texts }),
   });
