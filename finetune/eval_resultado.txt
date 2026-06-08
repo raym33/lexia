@@ -1,0 +1,53 @@
+ # rank  consulta
+ 1    2  OK  ¿Cómo se calcula la indemnización por despido impr  ->  Art. 110 LRJS, Art. 56 ET, Disposición transitoria undécima ET
+ 2    3  OK  ¿Qué plazo hay para impugnar judicialmente un desp  ->  Art. 114 LRJS, Art. 121 LRJS, Art. 103 LRJS
+ 3    1  OK  Obligación de reparar el daño causado por culpa o   ->  Art. 1902 CC, Art. 1904 CC, Art. 1910 CC
+ 4    4  OK  Resolver un contrato por incumplimiento de la otra  ->  Art. 27 LAU, Art. 51 LRJSP, Art. 119 ter RDLeg 1/2007
+ 5    1  OK  Libertad de pactos y autonomía de la voluntad en l  ->  Art. 1255 CC, Art. 1610 CC, Art. 1750 CC
+ 6    1  OK  Duración mínima del arrendamiento de vivienda habi  ->  Art. 9 LAU, Art. 10 LAU, Art. 14 LAU
+ 7    1  OK  ¿A quién corresponde la carga de la prueba en el p  ->  Art. 217 LEC, Art. 282 LEC, Art. 281 LEC
+ 8    1  OK  ¿Qué pena tiene el delito de homicidio?  ->  Art. 138 CP, Art. 140 CP, Art. 142 CP
+ 9    1  OK  ¿Cuándo un homicidio se considera asesinato?  ->  Art. 139 CP, Art. 140 CP, Art. 138 CP
+10    2  OK  Delito de hurto de cosa mueble ajena  ->  Art. 236 CP, Art. 234 CP, Art. 237 CP
+11    1  OK  Ocupación o usurpación de un inmueble ajeno  ->  Art. 245 CP, Art. 1559 CC, Art. 612 CC
+12    1  OK  Entrar en morada ajena sin consentimiento, allanam  ->  Art. 202 CP, Art. 203 CP, Art. 204 CP
+13    2  OK  Igualdad ante la ley y prohibición de discriminaci  ->  Art. 11 bis LEC, Art. 14 CE, Art. 15 ter LEC
+14    1  OK  Derecho a la tutela judicial efectiva sin indefens  ->  Art. 24 CE, Art. 227 LEC, Art. 225 LEC
+15    1  OK  Derecho a la intimidad personal y familiar  ->  Art. 18 CE, Art. 88 LO 3/2018, Art. 85 LO 3/2018
+16    1  OK  Plazo de prescripción de las acciones personales  ->  Art. 1964 CC, Art. 1969 CC, Art. 1961 CC
+17    -  MISS ¿A qué edad se alcanza la mayoría de edad?  ->  Art. 240 CC, Art. 254 CC, Art. 75 CC
+18    1  OK  ¿Qué es la legítima de los herederos forzosos?  ->  Art. 806 CC, Art. 814 CC, Art. 817 CC
+19    3  OK  Requisitos y procedimiento para el divorcio  ->  Art. 777 LEC, Art. 87 CC, Art. 86 CC
+20    1  OK  ¿En qué consiste la patria potestad sobre los hijo  ->  Art. 154 CC, Art. 157 CC, Art. 156 CC
+21    -  MISS Causas de despido disciplinario del trabajador  ->  Art. 107 LRJS, Art. 113 LRJS, Art. 108 LRJS
+22    1  OK  Duración máxima del periodo de prueba  ->  Art. 14 ET, Art. 77 LPACAP, Art. 277 LGSS
+23    1  OK  Jornada máxima de trabajo semanal  ->  Art. 34 ET, Art. 35 ET, Art. 34 RDLeg 1/1995
+24    3  OK  Derecho de desistimiento en compras a distancia  ->  Art. 106 RDLeg 1/2007, Art. 77 RDLeg 1/2007, Art. 102 RDLeg 1/2007
+25    2  OK  Videovigilancia de los trabajadores y protección d  ->  Art. 20 bis ET, Art. 89 LO 3/2018, Art. 87 LO 3/2018
+26    1  OK  Derecho a la presunción de inocencia  ->  Art. 24 CE, Art. 39 Ley 2/2023, Art. 38 LO 12/2007
+27    2  OK  Libertad de expresión e información  ->  Art. 85 LO 3/2018, Art. 20 CE, Art. 11 LO 1/2008
+28    1  OK  Derecho a la educación  ->  Art. 27 CE, Art. 17 RDLeg 1/2007, Art. 43 CE
+29    5  OK  Derecho a la huelga de los trabajadores  ->  Art. 315 CP, Art. 4 ET, Art. 177 LRJS
+30    -  MISS Inviolabilidad del domicilio  ->  Art. 203 CP, Art. 202 CP, Art. 200 CP
+31    1  OK  Definición del delito de robo  ->  Art. 237 CP, Art. 238 CP, Art. 241 CP
+32    1  OK  Delito de estafa  ->  Art. 248 CP, Art. 250 CP, Art. 249 CP
+33    3  OK  Delito de apropiación indebida  ->  Art. 254 CP, Art. 269 CP, Art. 253 CP
+34    1  OK  Delito de lesiones  ->  Art. 147 CP, Art. 155 CP, Art. 152 bis CP
+35    2  OK  Conducir bajo la influencia de alcohol o drogas  ->  Art. 383 CP, Art. 379 CP, Art. 381 CP
+36    1  OK  Plazos de prescripción de los delitos  ->  Art. 131 CP, Art. 134 CP, Art. 30 LRJSP
+37    -  MISS La legítima defensa como eximente  ->  Art. 104 CP, Art. 480 CP, Art. 808 CC
+38    3  OK  La tentativa de delito  ->  Art. 62 CP, Art. 15 CP, Art. 16 CP
+39    4  OK  Definición del contrato de compraventa  ->  Art. 330 CCom, Art. 325 CCom, Art. 343 CCom
+40    -  MISS Saneamiento por vicios ocultos en la compraventa  ->  Art. 1485 CC, Art. 1487 CC, Art. 1493 CC
+41    1  OK  Qué es una donación  ->  Art. 618 CC, Art. 619 CC, Art. 634 CC
+42    2  OK  Definición de usufructo  ->  Art. 468 CC, Art. 467 CC, Art. 469 CC
+43    1  OK  Qué es una servidumbre  ->  Art. 530 CC, Art. 533 CC, Art. 535 CC
+44    1  OK  Testamento ológrafo  ->  Art. 688 CC, Art. 689 CC, Art. 678 CC
+45    1  OK  Aceptar la herencia a beneficio de inventario  ->  Art. 1010 CC, Art. 1016 CC, Art. 992 CC
+46    -  MISS Causas de nulidad del matrimonio  ->  Art. 75 CC, Art. 219 CP, Art. 76 CC
+47    1  OK  Sociedad de gananciales  ->  Art. 1344 CC, Art. 1345 CC, Art. 1381 CC
+48    1  OK  Quién fija el salario mínimo interprofesional  ->  Art. 27 ET, Art. 607 LEC, Art. 32 ET
+49    1  OK  Derecho a vacaciones anuales retribuidas  ->  Art. 38 ET, Art. 166 LGSS, Art. 31 LO 1/2008
+50    1  OK  Duración del contrato de trabajo y contrato indefi  ->  Art. 15 ET, Art. 16 ET, Art. 442 CCom
+------------------------------------------------------------
+Hit@1=29/50  Hit@3=41/50  Hit@8=44/50  MRR=0.697
