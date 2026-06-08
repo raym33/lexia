@@ -27,7 +27,7 @@ const META_PATH = join(__dirname, 'data', 'embeddings.meta.json');
 const PORT = process.env.PORT || 5174;
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
 const EMBED_BASE = process.env.EMBED_BASE || LM_BASE;  // embedder afinado (:1236) si se indica; chat sigue en LM_BASE
-const CHAT_MODEL = process.env.CHAT_MODEL || 'gemma-3-12b-it-qat';
+const CHAT_MODEL = process.env.CHAT_MODEL || 'gemma-4-26b-a4b-it-mlx';
 const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3-lexia';
 // Modelo rápido para expansión de consulta y reranking (puente lego->legal + precisión)
 const FAST_MODEL = process.env.FAST_MODEL || 'qwen2.5-7b-instruct';
