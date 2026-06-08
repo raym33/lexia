@@ -20,6 +20,31 @@ document.getElementById('logout')?.addEventListener('click', async (e) => {
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const renderCites = (t) => esc(t).replace(/\[(\d+)\]/g, '<span class="cite" data-n="$1">[$1]</span>');
 
+// Renderizador Markdown ligero y SEGURO (escapa primero) + citas [n] clicables.
+// Soporta encabezados, listas (•/-/1.), negrita, cursiva, código y párrafos.
+function renderMD(text) {
+  const inline = (x) => x
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[(\d+)\]/g, '<span class="cite" data-n="$1">[$1]</span>');
+  const lines = esc(text).split('\n');
+  let html = '', list = null;
+  const close = () => { if (list) { html += `</${list}>`; list = null; } };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    if (!line.trim()) { close(); continue; }
+    let m;
+    if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { close(); const lv = Math.min(m[1].length + 2, 6); html += `<h${lv}>${inline(m[2])}</h${lv}>`; }
+    else if ((m = line.match(/^\s*(?:[-*•]|–)\s+(.*)$/))) { if (list !== 'ul') { close(); html += '<ul>'; list = 'ul'; } html += `<li>${inline(m[1])}</li>`; }
+    else if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) { if (list !== 'ol') { close(); html += '<ol>'; list = 'ol'; } html += `<li>${inline(m[1])}</li>`; }
+    else { close(); html += `<p>${inline(line)}</p>`; }
+  }
+  close();
+  return html;
+}
+
 // ---------- Navegación entre vistas ----------
 function showView(name) {
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
@@ -74,7 +99,7 @@ formC.addEventListener('submit', async (e) => {
     });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    bot.innerHTML = renderCites(d.answer) +
+    bot.innerHTML = `<div class="md">${renderMD(d.answer)}</div>` +
       `<div class="meta">${d.model} · ${(d.ms / 1000).toFixed(1)}s · ${d.fuentes.length} fuentes</div>`;
     renderSources($('#sources'), d.fuentes);
     saveHistory(query, d.answer, d.fuentes);
@@ -110,7 +135,7 @@ formR.addEventListener('submit', async (e) => {
     const d = await r.json();
     if (d.error) throw new Error(d.error);
     lastDraft = d.draft;
-    out.innerHTML = `<div class="draft">${renderCites(d.draft)}</div>
+    out.innerHTML = `<div class="draft md">${renderMD(d.draft)}</div>
       <p class="note" style="margin-top:8px">${d.model} · ${(d.ms / 1000).toFixed(1)}s · borrador asistido, revísalo antes de presentar.</p>`;
     renderSources($('#draft-sources'), d.fuentes);
     $('#copiar').style.display = 'inline-block';
@@ -163,7 +188,7 @@ $('#hist-list').addEventListener('click', (e) => {
   $('#chat-empty')?.remove();
   chat.innerHTML = '';
   addBubble('user', esc(h.q));
-  addBubble('bot', renderCites(h.answer));
+  addBubble('bot', `<div class="md">${renderMD(h.answer)}</div>`);
   renderSources($('#sources'), h.fuentes);
   location.hash = 'consulta';
 });
