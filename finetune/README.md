@@ -54,3 +54,11 @@ doctrinal no aparece en el texto de la ley (p. ej. "despido disciplinario" → A
 - [ ] Generar dataset completo (pendiente: lanzar en background / GPU)
 - [ ] Entrenar (pendiente: GPU)
 - [ ] Re-embed + eval
+
+## Despliegue del modelo afinado (lo que se hizo)
+1. Entrenar LoRA: `python finetune/train_lora.py` → `finetune/out/bge-m3-lexia` (adaptador).
+2. Fusionar LoRA en el base (PEFT `merge_and_unload`) → `finetune/out/bge-m3-lexia-merged` (HF).
+3. Convertir a GGUF: `python /ruta/llama.cpp/convert_hf_to_gguf.py finetune/out/bge-m3-lexia-merged --outfile bge-m3-lexia-f16.gguf --outtype f16`.
+4. Colocar en `~/.lmstudio/models/lexia/bge-m3-lexia/` y `lms load text-embedding-bge-m3-lexia --identifier bge-m3-lexia`.
+5. Re-embeber: `EMBED_MODEL=bge-m3-lexia node embed.mjs` (vía LM Studio, ~25/s ≈ 2,3 h).
+6. Servir: arrancar Lexia con `EMBED_MODEL=bge-m3-lexia` (las consultas se embeben con el afinado).

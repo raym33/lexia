@@ -37,3 +37,7 @@ tmp/
 .DS_Store
 Thumbs.db
 finetune/data/
+
+# Fine-tuning: modelos/venv pesados (regenerables)
+finetune/out/
+finetune/.venv/

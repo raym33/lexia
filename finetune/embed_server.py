@@ -20,7 +20,8 @@ from sentence_transformers import SentenceTransformer
 import torch
 DEV = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
 MODEL = SentenceTransformer(MODEL_DIR, device=DEV)
-print(f"✓ Modelo cargado en {DEV}. Sirviendo en http://127.0.0.1:{PORT}/v1/embeddings")
+MODEL.max_seq_length = 512  # los textos legales largos a longitud completa son lentísimos; 512 basta para recuperación
+print(f"✓ Modelo cargado en {DEV} (max_seq_len=512). Sirviendo en http://127.0.0.1:{PORT}/v1/embeddings")
 
 
 class H(BaseHTTPRequestHandler):
