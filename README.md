@@ -8,6 +8,10 @@ Este repositorio es la **web app completa** (demo enseñable a VC). Es un sistem
 recupera las normas relevantes y genera una respuesta donde **cada afirmación lleva su cita**,
 con el diseño orientado a **no alucinar** (la alucinación de una cita es inadmisible en derecho).
 
+También puede instalarse como **skill para un Agent AI OS**: el archivo [`SKILL.md`](SKILL.md)
+describe cuándo usar Lexia, y [`references/api.md`](references/api.md) documenta los endpoints
+HTTP estables para agentes.
+
 ### La aplicación
 
 - **Landing** (`/`) — marketing, propuesta de valor y captación de despachos piloto (waitlist).
@@ -25,6 +29,20 @@ con el diseño orientado a **no alucinar** (la alucinación de una cita es inadm
 | POST | `/api/redactar` | Genera borrador de escrito con base normativa citada |
 | GET  | `/api/fuentes` | Lista el corpus indexado (biblioteca) |
 | POST | `/api/waitlist` | Guarda leads de despachos en `data/waitlist.json` |
+
+### API para agentes
+
+Los endpoints `/api/agent/*` están pensados para consumo por otros agentes o runtimes:
+
+| Método | Ruta | Función |
+|---|---|---|
+| GET  | `/api/agent/health` | Estado del índice, modelos y configuración |
+| POST | `/api/agent/retrieve` | Recupera fuentes BOE con texto, sin generar respuesta |
+| POST | `/api/agent/answer` | Responde con citas verificables |
+| POST | `/api/agent/draft` | Genera borradores jurídicos con fuentes |
+
+Si defines `LEXIA_AGENT_TOKEN`, usa `Authorization: Bearer <token>`. Sin token configurado,
+los endpoints de agente solo aceptan llamadas desde localhost.
 
 ---
 

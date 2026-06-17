@@ -43,6 +43,7 @@ const RERANK_URL = process.env.RERANK_URL || 'http://127.0.0.1:1235/v1/rerank';
 // (metía términos amplios que enterraban el artículo correcto). Rerank ON.
 const USE_EXPAND = process.env.USE_EXPAND === '1';
 const USE_RERANK = process.env.USE_RERANK !== '0';
+const AGENT_TOKEN = process.env.LEXIA_AGENT_TOKEN || '';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -399,6 +400,80 @@ async function handleConsulta(req, res) {
   res.end(JSON.stringify({ answer, fuentes, ms, model: CHAT_MODEL }));
 }
 
+function sourcePayload(h, i, { includeText = false } = {}) {
+  const out = {
+    n: i + 1,
+    id: h.doc.id,
+    cita: h.doc.cita,
+    fuente: h.doc.fuente,
+    materia: h.doc.materia,
+    rango: h.doc.rango,
+    url: h.doc.url,
+    score: Number(h.score.toFixed(3)),
+  };
+  if (h.doc.contexto) out.contexto = h.doc.contexto;
+  if (includeText) out.texto = h.doc.texto;
+  return out;
+}
+
+function clientIsLocal(req) {
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+}
+
+function requireAgent(req, res) {
+  if (!AGENT_TOKEN) {
+    if (clientIsLocal(req)) return true;
+    json(res, 403, { error: 'LEXIA_AGENT_TOKEN no configurado; solo se aceptan llamadas localhost' });
+    return false;
+  }
+  const auth = req.headers.authorization || '';
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  const token = bearer || req.headers['x-lexia-token'] || '';
+  if (token === AGENT_TOKEN) return true;
+  json(res, 401, { error: 'Token de agente inválido' });
+  return false;
+}
+
+function handleAgentHealth(req, res) {
+  json(res, 200, {
+    ok: true,
+    index: INDEX.length,
+    dim: DIM,
+    chat_model: CHAT_MODEL,
+    embed_model: EMBED_MODEL,
+    top_k: TOP_K,
+    rerank: USE_RERANK,
+    expand: USE_EXPAND,
+  });
+}
+
+async function handleAgentRetrieve(req, res) {
+  const { query, k, include_text = true } = await readBody(req);
+  if (!query || !query.trim()) return json(res, 400, { error: 'Falta la consulta' });
+  const t0 = Date.now();
+  const hits = await search(query, Math.min(Number(k) || TOP_K, 20));
+  json(res, 200, {
+    query,
+    sources: hits.map((h, i) => sourcePayload(h, i, { includeText: include_text !== false })),
+    ms: Date.now() - t0,
+  });
+}
+
+async function handleAgentAnswer(req, res) {
+  const { query, k } = await readBody(req);
+  if (!query || !query.trim()) return json(res, 400, { error: 'Falta la consulta' });
+  const t0 = Date.now();
+  const hits = await search(query, Math.min(Number(k) || TOP_K, 12));
+  const answer = await chat(buildMessages(query, hits));
+  json(res, 200, {
+    query,
+    answer,
+    sources: hits.map((h, i) => sourcePayload(h, i, { includeText: true })),
+    ms: Date.now() - t0,
+    model: CHAT_MODEL,
+  });
+}
+
 // Búsqueda sin LLM: solo recuperación (rápida). Útil para la UI y para evaluar.
 async function handleBuscar(req, res) {
   const { query, k } = await readBody(req);
@@ -506,6 +581,27 @@ REGLAS:
   res.end(JSON.stringify({ draft, fuentes, ms: Date.now() - t0, model: CHAT_MODEL }));
 }
 
+async function handleAgentDraft(req, res) {
+  const { tipo = 'escrito', hechos = '', instrucciones = '', k } = await readBody(req);
+  if (!hechos.trim()) return json(res, 400, { error: 'Faltan los hechos / contexto' });
+  const t0 = Date.now();
+  const tipoNombre = TIPOS_ESCRITO[tipo] || tipo;
+  const hits = await search(`${tipoNombre}. ${hechos} ${instrucciones}`, Math.min(Number(k) || TOP_K, 12));
+  const contexto = hits
+    .map((h, i) => `[${i + 1}] ${h.doc.cita} (${h.doc.fuente})\n${h.doc.texto}`)
+    .join('\n\n');
+  const system = `Eres Lexia, un asistente de redacción jurídica para abogados en España. Generas borradores profesionales en español jurídico formal. Usa solo las FUENTES, cita con [n], no inventes preceptos y marca datos pendientes con {{marcador}}.`;
+  const user = `FUENTES NORMATIVAS:\n${contexto}\n\nTIPO DE DOCUMENTO: ${tipoNombre}\n\nHECHOS / CONTEXTO:\n${hechos}\n\nINSTRUCCIONES ADICIONALES:\n${instrucciones || '(ninguna)'}\n\nRedacta el borrador citando las fuentes con [n].`;
+  const draft = await chat([{ role: 'system', content: system }, { role: 'user', content: user }], { temperature: 0.2 });
+  json(res, 200, {
+    tipo: tipoNombre,
+    draft,
+    sources: hits.map((h, i) => sourcePayload(h, i, { includeText: true })),
+    ms: Date.now() - t0,
+    model: CHAT_MODEL,
+  });
+}
+
 function handleFuentes(req, res) {
   const url = new URL(req.url, 'http://x');
   const q = (url.searchParams.get('q') || '').toLowerCase();
@@ -556,6 +652,12 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/api/logout') return handleLogout(req, res);
     if (req.method === 'GET' && req.url === '/api/me') return handleMe(req, res);
     if (req.method === 'POST' && req.url === '/api/waitlist') return await handleWaitlist(req, res);
+
+    // --- Agent OS API (Bearer LEXIA_AGENT_TOKEN, o localhost si no se configura) ---
+    if (req.method === 'GET' && req.url === '/api/agent/health') { if (!requireAgent(req, res)) return; return handleAgentHealth(req, res); }
+    if (req.method === 'POST' && req.url === '/api/agent/retrieve') { if (!requireAgent(req, res)) return; return await handleAgentRetrieve(req, res); }
+    if (req.method === 'POST' && req.url === '/api/agent/answer') { if (!requireAgent(req, res)) return; return await handleAgentAnswer(req, res); }
+    if (req.method === 'POST' && req.url === '/api/agent/draft') { if (!requireAgent(req, res)) return; return await handleAgentDraft(req, res); }
 
     // --- App (requieren sesión) ---
     if (req.method === 'POST' && req.url === '/api/consulta') { if (!requireAuth(req, res)) return; return await handleConsulta(req, res); }
