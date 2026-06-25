@@ -4,6 +4,8 @@ node_modules/
 # Secretos y entorno
 .env
 .env.*
+# ...pero sí versionamos la plantilla de ejemplo
+!.env.example
 *.pem
 *.key
 
