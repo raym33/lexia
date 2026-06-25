@@ -1,8 +1,8 @@
 interface:
   display_name: "Lexia"
-  short_description: "Spanish BOE legal RAG with citations"
+  short_description: "Spanish BOE legal and administrative-law RAG with citations"
   brand_color: "#0F766E"
-  default_prompt: "Use $lexia to retrieve BOE sources and answer a Spanish legal question with citations."
+  default_prompt: "Use $lexia to retrieve BOE sources and answer a Spanish legal or administrative-law question with citations."
 
 policy:
   allow_implicit_invocation: true

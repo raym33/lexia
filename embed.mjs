@@ -1,5 +1,5 @@
 // Lexia — embedder masivo a store BINARIO (float32), resumible y consistente.
-// El JSON no escala (216k × 768 floats ≈ 3,6 GB). Binario ≈ 663 MB.
+// El JSON no escala. El store binario ocupa aprox. docs × dimension × 4 bytes.
 //
 // Store (en data/):
 //   embeddings.bin        float32 contiguos, fila i = ids[i], DIM floats
@@ -16,6 +16,7 @@ import { readFile, writeFile, readdir, appendFile, stat, truncate } from 'node:f
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import './config.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const CORPUS_DIR = join(__dirname, 'corpus');
@@ -24,8 +25,8 @@ const IDS = join(__dirname, 'data', 'embeddings.ids.txt');
 const META = join(__dirname, 'data', 'embeddings.meta.json');
 
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
-const EMBED_BASE = process.env.EMBED_BASE || LM_BASE;  // embedder afinado en :1236 si se indica
-const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3-lexia';
+const EMBED_BASE = process.env.EMBED_BASE || LM_BASE;
+const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3';
 const args = process.argv.slice(2);
 const bi = args.indexOf('--batch');
 const BATCH = bi >= 0 ? Number(args[bi + 1]) : 96;

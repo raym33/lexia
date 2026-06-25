@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Lexia ⚖️ — Acceso</title>
+<title>Lexia — Acceso</title>
 <link rel="stylesheet" href="/styles.css" />
 <style>
   .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
@@ -18,26 +18,26 @@
   .auth-card .btn { width: 100%; }
   .auth-msg { font-size: 13px; margin-top: 12px; min-height: 18px; }
   .auth-foot { text-align: center; margin-top: 18px; font-size: 13px; }
-  .field-despacho { display: none; }
-  body.register .field-despacho { display: block; }
+  .field-organizacion { display: none; }
+  body.register .field-organizacion { display: block; }
 </style>
 </head>
 <body>
   <div class="auth-wrap">
     <div class="auth-card">
       <h1>Lexia <span class="brand"><span class="accent">⚖</span></span></h1>
-      <p class="sub">Acceso para despachos · IA jurídica 100% local</p>
+      <p class="sub">Acceso para organizaciones · IA jurídico-administrativa local</p>
       <div class="tabs">
         <button id="tab-login" class="active">Entrar</button>
         <button id="tab-register">Crear cuenta</button>
       </div>
       <form id="auth-form">
-        <div class="field-despacho">
-          <label for="despacho">Despacho / bufete</label>
-          <input type="text" id="despacho" placeholder="Nombre de tu despacho" autocomplete="organization" />
+        <div class="field-organizacion">
+          <label for="organizacion">Organización / entidad</label>
+          <input type="text" id="organizacion" placeholder="Nombre de tu organización" autocomplete="organization" />
         </div>
         <label for="email">Email profesional</label>
-        <input type="email" id="email" placeholder="tu@despacho.es" autocomplete="email" required />
+        <input type="email" id="email" placeholder="tu@organizacion.es" autocomplete="email" required />
         <label for="password">Contraseña</label>
         <input type="password" id="password" placeholder="Mínimo 8 caracteres" autocomplete="current-password" required />
         <button class="btn" type="submit" id="submit">Entrar</button>
@@ -61,7 +61,7 @@ function setMode(m) {
   tabLogin.classList.toggle('active', m === 'login');
   tabReg.classList.toggle('active', m === 'register');
   submit.textContent = m === 'login' ? 'Entrar' : 'Crear cuenta';
-  document.getElementById('despacho').required = (m === 'register');
+  document.getElementById('organizacion').required = (m === 'register');
   msg.textContent = '';
 }
 tabLogin.onclick = () => setMode('login');
@@ -78,7 +78,7 @@ document.getElementById('auth-form').addEventListener('submit', async (e) => {
     email: document.getElementById('email').value,
     password: document.getElementById('password').value,
   };
-  if (mode === 'register') payload.despacho = document.getElementById('despacho').value;
+  if (mode === 'register') payload.organizacion = document.getElementById('organizacion').value;
   try {
     const r = await fetch('/api/' + (mode === 'login' ? 'login' : 'register'), {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),

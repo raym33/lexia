@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Lexia ⚖️ — App</title>
+<title>Lexia — App</title>
 <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -20,7 +20,7 @@
       <span class="badge">● local</span>
       <div id="user-box" style="margin:12px 0">
         <div id="user-email" style="color:var(--txt);font-weight:600;word-break:break-all"></div>
-        <div id="user-despacho" style="font-size:11px"></div>
+        <div id="user-organizacion" style="font-size:11px"></div>
       </div>
       <a href="#" id="logout">Cerrar sesión</a> · <a href="/">Web</a>
     </div>
@@ -28,7 +28,7 @@
 
   <!-- CONSULTA -->
   <section class="view active" id="view-consulta">
-    <div class="view-head"><h2>🔎 Consulta jurídica</h2><p>Pregunta sobre legislación y jurisprudencia. Respuesta citada y verificable.</p></div>
+    <div class="view-head"><h2>🔎 Consulta jurídico-administrativa</h2><p>Pregunta sobre normativa española. Respuesta citada y verificable.</p></div>
     <div class="view-body">
       <div class="col-main">
         <div id="chat">
@@ -36,9 +36,9 @@
             <h3>Consulta en lenguaje natural</h3>
             <p>Lexia recupera las normas relevantes y responde citando cada fuente, sin inventar.</p>
             <div class="chips" id="ex-chips">
-              <button>¿Cómo se calcula la indemnización por despido improcedente?</button>
-              <button>¿Qué requisitos exige la responsabilidad civil extracontractual?</button>
-              <button>¿Duración mínima de un arrendamiento de vivienda?</button>
+              <button>¿Cuándo debe concederse trámite de audiencia?</button>
+              <button>¿Qué plazo hay para subsanar una solicitud?</button>
+              <button>¿Qué exige la motivación de un acto administrativo?</button>
               <button>¿A quién corresponde la carga de la prueba?</button>
             </div>
           </div>
@@ -50,19 +50,23 @@
       </div>
     </div>
     <form class="composer" id="form-consulta">
-      <textarea id="q" placeholder="Escribe tu consulta jurídica…" required></textarea>
+      <textarea id="q" placeholder="Escribe tu consulta jurídica o administrativa..." required></textarea>
       <button class="btn" type="submit">Consultar</button>
     </form>
   </section>
 
   <!-- REDACCION -->
   <section class="view" id="view-redaccion">
-    <div class="view-head"><h2>✍️ Redacción de escritos</h2><p>Genera un borrador con fundamentos de derecho citados. Tú revisas y adaptas.</p></div>
+    <div class="view-head"><h2>✍️ Redacción de borradores</h2><p>Genera un texto revisable con fundamentos de derecho citados.</p></div>
     <div class="view-body">
       <div class="col-main">
         <form id="form-redaccion">
           <label for="tipo">Tipo de documento</label>
           <select id="tipo">
+            <option value="resolucion">Resolución administrativa</option>
+            <option value="informe_admin">Informe jurídico-administrativo</option>
+            <option value="subsanacion">Requerimiento de subsanación</option>
+            <option value="contratacion">Nota sobre contratación pública</option>
             <option value="demanda">Demanda civil</option>
             <option value="contrato">Contrato</option>
             <option value="recurso">Recurso</option>
@@ -70,10 +74,10 @@
             <option value="clausula">Cláusula contractual</option>
             <option value="dictamen">Dictamen / informe jurídico</option>
           </select>
-          <label for="hechos">Hechos / contexto del caso</label>
-          <textarea id="hechos" rows="6" placeholder="Describe los hechos relevantes, las partes y lo que se pretende…" required></textarea>
+          <label for="hechos">Hechos / contexto del expediente o caso</label>
+          <textarea id="hechos" rows="6" placeholder="Describe hechos relevantes, partes, trámite, petición y decisión que se pretende..." required></textarea>
           <label for="instrucciones">Instrucciones adicionales (opcional)</label>
-          <textarea id="instrucciones" rows="2" placeholder="Tono, extensión, cláusulas concretas…"></textarea>
+          <textarea id="instrucciones" rows="2" placeholder="Tono, extensión, estructura, plazo, órgano o cláusulas concretas..."></textarea>
           <div class="toolbar">
             <button class="btn" type="submit">Generar borrador</button>
             <button class="btn btn-ghost" type="button" id="copiar" style="display:none">Copiar</button>
@@ -90,7 +94,7 @@
 
   <!-- BIBLIOTECA -->
   <section class="view" id="view-biblioteca">
-    <div class="view-head"><h2>📚 Biblioteca de fuentes</h2><p>Corpus jurídico indexado. En producción: BOE consolidado + jurisprudencia CENDOJ.</p></div>
+    <div class="view-head"><h2>📚 Biblioteca de fuentes</h2><p>Corpus normativo indexado. BOE consolidado regenerable localmente.</p></div>
     <div class="view-body single">
       <div class="col-main">
         <input type="text" id="lib-search" placeholder="Filtrar por norma, materia o texto…" style="margin-bottom:18px" />

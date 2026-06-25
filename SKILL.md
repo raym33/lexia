@@ -1,18 +1,18 @@
 ---
 name: lexia
-description: Spanish legal RAG over BOE legislation with verifiable citations. Use when an agent needs to answer questions about Spanish law, retrieve official BOE legal sources, draft Spanish legal documents with cited statutory support, or integrate a local legal research service into an agent OS through HTTP endpoints.
+description: Spanish legal and administrative-law RAG over BOE legislation with verifiable citations. Use when an agent needs to answer questions about Spanish law, retrieve official BOE legal sources, draft legal or public-sector administrative documents with cited statutory support, or integrate a local legal research service into an agent OS through HTTP endpoints.
 ---
 
 # Lexia
 
-Lexia is a local-first Spanish legal research skill. It retrieves BOE legal sources, generates cited answers, and drafts legal documents for lawyer review. Treat it as a source-grounded assistant, not as final legal advice.
+Lexia is a local-first Spanish legal and administrative-law research skill. It retrieves BOE legal sources, generates cited answers, and drafts legal or public-sector administrative documents for professional review. Treat it as a source-grounded assistant, not as final legal advice or an administrative act.
 
 ## Operating Rules
 
-- Use Lexia for Spanish-law questions where official legislative citations matter.
+- Use Lexia for Spanish-law or Spanish public-sector administrative-law questions where official legislative citations matter.
 - Prefer retrieval-first workflows: call retrieve, inspect sources, then answer or draft.
 - Do not invent statutes, article numbers, cases, or URLs. If the returned sources are insufficient, say so and name the missing source type.
-- Keep the professional responsible for final legal judgment. Lexia provides cited legal basis and drafts for review.
+- Keep the professional or competent public body responsible for final legal judgment. Lexia provides cited legal basis and drafts for review.
 - Preserve source numbers exactly as returned when citing: `[1]`, `[2]`, etc.
 
 ## Local Service

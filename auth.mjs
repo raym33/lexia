@@ -1,9 +1,9 @@
 // Lexia — autenticación multi-tenant, sin dependencias (crypto nativo).
 // - Contraseñas: scrypt + salt aleatorio (nunca en claro).
 // - Sesiones: cookie firmada con HMAC-SHA256 (stateless; sobrevive a reinicios).
-// - Usuarios y despachos: store JSON en data/ (privado, fuera de git).
+// - Usuarios y organizaciones: store JSON en data/ (privado, fuera de git).
 //
-// Para el MVP: registro abierto; el primer usuario de un despacho es su admin.
+// Para el MVP: registro abierto; el primer usuario de una organización es su admin.
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -98,21 +98,21 @@ function currentUser(req) {
 // ---------- Operaciones de cuenta ----------
 const normEmail = (e) => String(e || '').trim().toLowerCase();
 
-async function register({ email, password, despacho }) {
+async function register({ email, password, organizacion }) {
   email = normEmail(email);
   if (!email.includes('@')) throw new Error('Email no válido');
   if (!password || password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres');
-  if (!despacho || !despacho.trim()) throw new Error('Indica el nombre del despacho');
+  if (!organizacion || !organizacion.trim()) throw new Error('Indica el nombre de la organización');
   const users = await loadUsers();
   if (users.some((u) => u.email === email)) throw new Error('Ya existe una cuenta con ese email');
-  const despachoNorm = despacho.trim();
-  const esPrimeroDelDespacho = !users.some((u) => u.despacho.toLowerCase() === despachoNorm.toLowerCase());
+  const orgNorm = organizacion.trim();
+  const esPrimeroDeLaOrg = !users.some((u) => String(u.organizacion || '').toLowerCase() === orgNorm.toLowerCase());
   const { salt, hash } = hashPassword(password);
   const user = {
     id: randomBytes(8).toString('hex'),
     email, salt, hash,
-    despacho: despachoNorm,
-    role: esPrimeroDelDespacho ? 'admin' : 'miembro',
+    organizacion: orgNorm,
+    role: esPrimeroDeLaOrg ? 'admin' : 'miembro',
     createdAt: new Date().toISOString(),
   };
   users.push(user);
@@ -128,7 +128,7 @@ async function login({ email, password }) {
   return publicUser(u);
 }
 
-const publicUser = (u) => ({ id: u.id, email: u.email, despacho: u.despacho, role: u.role });
+const publicUser = (u) => ({ id: u.id, email: u.email, organizacion: u.organizacion, role: u.role });
 
 export {
   register, login, currentUser, publicUser,

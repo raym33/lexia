@@ -1,8 +1,16 @@
 {
   "name": "lexia",
-  "version": "0.1.0",
-  "description": "Lexia — IA jurídica open source para abogados (España). RAG sobre legislación y jurisprudencia con citas verificables, 100% local sobre LM Studio.",
+  "version": "0.2.0",
+  "description": "Lexia — IA jurídico-administrativa open source para España. RAG local sobre BOE con citas verificables, pensado para sector público, asesorías jurídicas y agentes.",
   "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raym33/lexia.git"
+  },
   "scripts": {
     "start": "node server.mjs",
     "ingest": "node ingest.mjs --all",

@@ -7,7 +7,9 @@
 //
 // Requiere una cuenta válida (la app está protegida por sesión). Crea una con:
 //   curl -X POST $BASE/api/register -H 'content-type: application/json' \
-//     -d '{"email":"eval@lexia.local","password":"evaluacion123","despacho":"Eval"}'
+//     -d '{"email":"eval@lexia.local","password":"evaluacion123","organizacion":"Eval"}'
+
+import '../config.mjs';
 
 const BASE = process.env.BASE || 'http://localhost:5174';
 const EMAIL = process.env.EVAL_EMAIL || 'eval@lexia.local';

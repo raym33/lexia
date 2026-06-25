@@ -5,12 +5,13 @@
 //
 // Requisitos: LM Studio en :1234 y el servidor Lexia en :5174 (para negativos).
 // Uso:  node finetune/gen_dataset.mjs --n 3000 --per 3
-//   env: GEN_MODEL (def. gemma-3-4b-it-qat), BASE, EVAL_EMAIL, EVAL_PASS
+//   env: GEN_MODEL (def. gemma-3-12b-it), BASE, EVAL_EMAIL, EVAL_PASS
 
 import { readFile, writeFile, appendFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import '../config.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const CORPUS = join(__dirname, '..', 'corpus', 'boe.json');
@@ -18,9 +19,9 @@ const OUT = join(__dirname, 'data', 'train.jsonl');
 const DONE = join(__dirname, 'data', '_done_ids.json');
 
 const LM = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
-const GEN_MODEL = process.env.GEN_MODEL || 'gemma-3-4b-it-qat';
+const GEN_MODEL = process.env.GEN_MODEL || 'gemma-3-12b-it';
 const BASE = process.env.BASE || 'http://localhost:5174';
-const EMAIL = process.env.EVAL_EMAIL || 'ana@bufete-demo.es';
+const EMAIL = process.env.EVAL_EMAIL || 'eval@lexia.local';
 const PASS = process.env.EVAL_PASS || 'contrasena123';
 const args = process.argv.slice(2);
 const argN = (f, d) => { const i = args.indexOf(f); return i >= 0 ? Number(args[i + 1]) : d; };

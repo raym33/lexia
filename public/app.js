@@ -9,7 +9,7 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
     if (!r.ok) { location.href = '/login.html'; return; }
     const { user } = await r.json();
     const e = document.getElementById('user-email'); if (e) e.textContent = user.email;
-    const d = document.getElementById('user-despacho'); if (d) d.textContent = `${user.despacho} · ${user.role}`;
+    const org = document.getElementById('user-organizacion'); if (org) org.textContent = `${user.organizacion || 'Organización local'} · ${user.role}`;
   } catch { location.href = '/login.html'; }
 })();
 document.getElementById('logout')?.addEventListener('click', async (e) => {

@@ -1,5 +1,5 @@
-// Lexia — IA jurídica open source para abogados (España)
-// MVP: RAG sobre legislación/jurisprudencia con citas verificables.
+// Lexia — IA jurídico-administrativa open source para España.
+// MVP: RAG sobre legislación con citas verificables.
 // 100% local: LLM + embeddings servidos por LM Studio. Cero datos a terceros.
 //
 // Flujo:
@@ -11,10 +11,11 @@
 // lo que esté en los fragmentos recuperados, y cada afirmación lleva su cita.
 
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import './config.mjs';
 import { register, login, currentUser, signSession, sessionCookie, clearCookie } from './auth.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -27,10 +28,10 @@ const META_PATH = join(__dirname, 'data', 'embeddings.meta.json');
 const PORT = process.env.PORT || 5174;
 const LM_BASE = process.env.LM_BASE || 'http://127.0.0.1:1234/v1';
 const EMBED_BASE = process.env.EMBED_BASE || LM_BASE;  // embedder afinado (:1236) si se indica; chat sigue en LM_BASE
-const CHAT_MODEL = process.env.CHAT_MODEL || 'gemma-4-26b-a4b-it-mlx';
-const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3-lexia';
+const CHAT_MODEL = process.env.CHAT_MODEL || 'gemma-3-12b-it';
+const EMBED_MODEL = process.env.EMBED_MODEL || 'bge-m3';
 // Modelo rápido para expansión de consulta y reranking (puente lego->legal + precisión)
-const FAST_MODEL = process.env.FAST_MODEL || 'qwen2.5-7b-instruct';
+const FAST_MODEL = process.env.FAST_MODEL || 'qwen3-8b-instruct';
 const TOP_K = Number(process.env.TOP_K || 6);
 const RECALL_N = Number(process.env.RECALL_N || 40); // candidatos antes de rerank
 // Reranker cross-encoder determinista (llama.cpp server con --reranking). Sustituye
@@ -351,16 +352,16 @@ function buildMessages(query, hits) {
     .map((h, i) => `[${i + 1}] ${h.doc.cita} (${h.doc.fuente}) — ${h.doc.materia}\n${h.doc.texto}`)
     .join('\n\n');
 
-  const system = `Eres Lexia, un asistente jurídico para abogados en España. Respondes en español, con rigor técnico-jurídico y tono profesional.
+  const system = `Eres Lexia, un asistente jurídico-administrativo para España. Respondes en español, con rigor técnico-jurídico y tono profesional.
 
 REGLAS INNEGOCIABLES:
 1. Responde ÚNICAMENTE con la información contenida en las FUENTES proporcionadas. No uses conocimiento externo ni inventes artículos, números o sentencias.
 2. Cada afirmación jurídica debe ir acompañada de su cita entre corchetes, p. ej. [1], [2], según el número de la fuente usada.
 3. Si las fuentes no contienen información suficiente para responder, dilo claramente: "Las fuentes disponibles no permiten responder con seguridad" y sugiere qué norma habría que consultar. NUNCA rellenes el hueco inventando.
-4. No des asesoramiento que sustituya el criterio del letrado: aporta la base normativa y deja la decisión al profesional.
+4. No des asesoramiento que sustituya el criterio del abogado, funcionario o profesional responsable: aporta la base normativa y deja la decisión al profesional.
 5. Sé conciso y estructurado. Si procede, distingue régimen general y excepciones.`;
 
-  const user = `FUENTES:\n${contexto}\n\nCONSULTA DEL ABOGADO:\n${query}\n\nResponde citando las fuentes con [n].`;
+  const user = `FUENTES:\n${contexto}\n\nCONSULTA DEL PROFESIONAL:\n${query}\n\nResponde citando las fuentes con [n].`;
 
   return [
     { role: 'system', content: system },
@@ -494,7 +495,7 @@ async function readBody(req) {
 }
 
 // ---------------------------------------------------------------------------
-// Autenticación (cuentas de despachos)
+// Autenticación (cuentas de organizaciones)
 // ---------------------------------------------------------------------------
 const json = (res, code, obj, headers = {}) => {
   res.writeHead(code, { 'content-type': 'application/json', ...headers });
@@ -522,7 +523,7 @@ function handleLogout(req, res) {
 function handleMe(req, res) {
   const u = currentUser(req);
   if (!u) return json(res, 401, { error: 'No autenticado' });
-  json(res, 200, { user: { id: u.id, email: u.email, despacho: u.despacho, role: u.role } });
+  json(res, 200, { user: { id: u.id, email: u.email, organizacion: u.organizacion, role: u.role } });
 }
 
 // Guard: exige sesión válida; si no, 401.
@@ -533,6 +534,10 @@ function requireAuth(req, res) {
 }
 
 const TIPOS_ESCRITO = {
+  resolucion: 'Resolución administrativa',
+  informe_admin: 'Informe jurídico-administrativo',
+  subsanacion: 'Requerimiento de subsanación',
+  contratacion: 'Nota sobre contratación pública',
   demanda: 'Demanda civil',
   contrato: 'Contrato',
   recurso: 'Recurso',
@@ -555,15 +560,15 @@ async function handleRedactar(req, res) {
     .map((h, i) => `[${i + 1}] ${h.doc.cita} (${h.doc.fuente})\n${h.doc.texto}`)
     .join('\n\n');
 
-  const system = `Eres Lexia, un asistente de redacción jurídica para abogados en España. Generas borradores de escritos profesionales en español jurídico formal.
+  const system = `Eres Lexia, un asistente de redacción jurídico-administrativa para España. Generas borradores profesionales en español jurídico formal para revisión por abogados, funcionarios o equipos jurídico-administrativos.
 
 REGLAS:
-1. Redacta un BORRADOR del documento solicitado, listo para que el letrado lo revise y adapte.
+1. Redacta un BORRADOR del documento solicitado, listo para que el profesional responsable lo revise y adapte.
 2. Apóyate en la normativa de las FUENTES y cita los preceptos relevantes con [n] en el cuerpo del texto.
 3. No inventes artículos, números ni jurisprudencia que no estén en las FUENTES. Si falta una base legal, indícalo con un marcador entre llaves, p. ej. {{verificar precepto aplicable}}.
-4. Usa marcadores entre llaves para los datos que el abogado debe completar, p. ej. {{nombre del cliente}}, {{cuantía}}, {{juzgado}}.
+4. Usa marcadores entre llaves para los datos que el profesional debe completar, p. ej. {{órgano}}, {{número de expediente}}, {{interesado}}, {{cuantía}}.
 5. Estructura el documento según los usos forenses (encabezamiento, hechos, fundamentos de derecho, súplico/petición, fecha y firma) cuando proceda.
-6. Es un borrador asistido; el criterio y la responsabilidad final son del letrado.`;
+6. Es un borrador asistido; el criterio, la competencia y la responsabilidad final son del profesional u órgano responsable.`;
 
   const user = `FUENTES NORMATIVAS:\n${contexto}\n\nTIPO DE DOCUMENTO: ${tipoNombre}\n\nHECHOS / CONTEXTO:\n${hechos}\n\nINSTRUCCIONES ADICIONALES:\n${instrucciones || '(ninguna)'}\n\nRedacta el borrador citando las fuentes con [n].`;
 
@@ -590,7 +595,7 @@ async function handleAgentDraft(req, res) {
   const contexto = hits
     .map((h, i) => `[${i + 1}] ${h.doc.cita} (${h.doc.fuente})\n${h.doc.texto}`)
     .join('\n\n');
-  const system = `Eres Lexia, un asistente de redacción jurídica para abogados en España. Generas borradores profesionales en español jurídico formal. Usa solo las FUENTES, cita con [n], no inventes preceptos y marca datos pendientes con {{marcador}}.`;
+  const system = `Eres Lexia, un asistente de redacción jurídico-administrativa para España. Generas borradores profesionales en español jurídico formal. Usa solo las FUENTES, cita con [n], no inventes preceptos y marca datos pendientes con {{marcador}}.`;
   const user = `FUENTES NORMATIVAS:\n${contexto}\n\nTIPO DE DOCUMENTO: ${tipoNombre}\n\nHECHOS / CONTEXTO:\n${hechos}\n\nINSTRUCCIONES ADICIONALES:\n${instrucciones || '(ninguna)'}\n\nRedacta el borrador citando las fuentes con [n].`;
   const draft = await chat([{ role: 'system', content: system }, { role: 'user', content: user }], { temperature: 0.2 });
   json(res, 200, {
@@ -612,21 +617,6 @@ function handleFuentes(req, res) {
   const fuentes = docs.slice(0, limit).map(({ row, ...meta }) => meta);
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ fuentes, total, mostrados: fuentes.length }));
-}
-
-async function handleWaitlist(req, res) {
-  const { email = '', despacho = '', mensaje = '' } = await readBody(req);
-  if (!email.includes('@')) {
-    res.writeHead(400, { 'content-type': 'application/json' });
-    return res.end(JSON.stringify({ error: 'Email no válido' }));
-  }
-  const WAITLIST = join(__dirname, 'data', 'waitlist.json');
-  let list = [];
-  if (existsSync(WAITLIST)) list = JSON.parse(await readFile(WAITLIST, 'utf-8'));
-  list.push({ email, despacho, mensaje, fecha: new Date().toISOString() });
-  await writeFile(WAITLIST, JSON.stringify(list, null, 2));
-  res.writeHead(200, { 'content-type': 'application/json' });
-  res.end(JSON.stringify({ ok: true, posicion: list.length }));
 }
 
 async function serveStatic(req, res) {
@@ -651,7 +641,6 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && req.url === '/api/login') return await handleLogin(req, res);
     if (req.method === 'POST' && req.url === '/api/logout') return handleLogout(req, res);
     if (req.method === 'GET' && req.url === '/api/me') return handleMe(req, res);
-    if (req.method === 'POST' && req.url === '/api/waitlist') return await handleWaitlist(req, res);
 
     // --- Agent OS API (Bearer LEXIA_AGENT_TOKEN, o localhost si no se configura) ---
     if (req.method === 'GET' && req.url === '/api/agent/health') { if (!requireAgent(req, res)) return; return handleAgentHealth(req, res); }
@@ -676,7 +665,7 @@ const server = createServer(async (req, res) => {
 await buildIndex();
 buildLexical();
 server.listen(PORT, () => {
-  console.log(`\n  Lexia ⚖️  IA jurídica open source`);
+  console.log(`\n  Lexia ⚖️  IA jurídico-administrativa open source`);
   console.log(`  http://localhost:${PORT}`);
   console.log(`  LLM: ${CHAT_MODEL} · Embeddings: ${EMBED_MODEL} · top-k: ${TOP_K}\n`);
 });
